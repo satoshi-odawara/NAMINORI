@@ -6,7 +6,7 @@
 - [x] ISSUE-004: Streamlit UI - 解析されたデータに対するマハラノビス距離と異常ステータスの表示 [CLOSED]
 - [x] ISSUE-005: Streamlit UI - 監査ログ（JSON）の画面表示およびダウンロード機能の実装 [CLOSED]
 - [x] ISSUE-006: Streamlit UI - Plotlyグラフのインタラクション強化 (ズーム、パン、スパイクノイズ確認) [CLOSED]
-- [ ] ISSUE-007: Integration Test - WAVファイルアップロードから診断結果までのフルパイプラインテスト [OPEN]
+- [x] ISSUE-007: Integration Test - WAVファイルアップロードから診断結果までのフルパイプラインテスト [CLOSED]
 - [ ] ISSUE-008: Integration Test - UI設定とバックエンド処理の一貫性検証 [OPEN]
 - [ ] ISSUE-009: Regression Test - 機能追加・修正後の特徴量と診断結果の一貫性検証 [OPEN]
 - [ ] ISSUE-010: CI/CD Setup - GitHub Actionsによる自動テスト（pytest）とコード品質チェック（ruff check）の導入 [OPEN]
