@@ -25,6 +25,6 @@
 - [x] ISSUE-023: [Developer] Update Streamlit UI for Dynamic Plugins [CLOSED]
 - [x] ISSUE-024: [Architect] Design Noise Reduction Evaluation Metrics [CLOSED]
 - [x] ISSUE-025: [Developer] Implement Backend for Evaluation Framework [CLOSED]
-- [ ] ISSUE-026: [Developer] Implement Evaluation UI in Streamlit [OPEN]
+- [x] ISSUE-026: [Developer] Implement Evaluation UI in Streamlit [CLOSED]
 - [ ] ISSUE-027: [QA/Expert] Add Comprehensive Tests for Plugin Framework [OPEN]
 - [x] ISSUE-028: [Documentation] Create User Guide for Custom Plugins [CLOSED]

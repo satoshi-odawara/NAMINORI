@@ -7,6 +7,7 @@ from src.diagnostics.mt_method import MTSpace
 from src.utils.audit_log import AnalysisResult
 from src.core.plugins import plugin_manager
 from src.core.evaluation import NoiseReductionEvaluation
+import pandas as pd
 import tempfile
 import os
 from datetime import datetime
@@ -269,6 +270,54 @@ if uploaded_file:
             fig2.update_layout(xaxis_title="Frequency (Hz)", yaxis_title=f"Amplitude ({unit})", height=250, margin=dict(l=20,r=20,t=40,b=20))
             st.plotly_chart(fig2, use_container_width=True)
             
+        # --- Noise Reduction Evaluation ---
+        if nr_eval_results:
+            with st.expander("ノイズ除去 評価", expanded=True):
+                st.subheader("プラグイン効果の評価")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("##### 特徴量へのインパクト")
+                    
+                    before_features = asdict(nr_eval_results.features_before)
+                    after_features = asdict(nr_eval_results.features_after)
+                    
+                    df_data = []
+                    for key in before_features:
+                        before_val = before_features[key]
+                        after_val = after_features[key]
+                        delta = ((after_val - before_val) / before_val) * 100 if before_val != 0 else 0
+                        df_data.append({
+                            "Feature": key.replace('_', ' ').title(),
+                            "Before": f"{before_val:.3f}",
+                            "After": f"{after_val:.3f}",
+                            "Delta (%)": f"{delta:+.2f}%"
+                        })
+                    
+                    eval_df = pd.DataFrame(df_data)
+                    st.table(eval_df.set_index("Feature"))
+
+                with col2:
+                    st.markdown("##### スペクトル比較")
+                    
+                    # Calculate FFTs for all three signals
+                    freqs_pre, mags_pre, _ = calculate_fft_features(nr_eval_results.signal_pre_nr, fs_hz, config.window)
+                    freqs_post, mags_post, _ = calculate_fft_features(nr_eval_results.signal_post_nr, fs_hz, config.window)
+                    freqs_rem, mags_rem, _ = calculate_fft_features(nr_eval_results.removed_signal, fs_hz, config.window)
+
+                    fig_eval = go.Figure()
+                    fig_eval.add_trace(go.Scatter(x=freqs_pre, y=mags_pre, name='Before NR', line=dict(color='lightblue')))
+                    fig_eval.add_trace(go.Scatter(x=freqs_post, y=mags_post, name='After NR', line=dict(color='blue')))
+                    fig_eval.add_trace(go.Scatter(x=freqs_rem, y=mags_rem, name='Removed Signal', line=dict(color='red', dash='dash')))
+
+                    fig_eval.update_layout(
+                        xaxis_title="Frequency (Hz)", yaxis_title=f"Amplitude ({unit})", 
+                        height=300, margin=dict(l=20,r=20,t=40,b=20),
+                        legend=dict(yanchor="top", y=0.99, xanchor="right", x=0.99)
+                    )
+                    st.plotly_chart(fig_eval, use_container_width=True)
+
         # --- Audit Log ---
         features_for_audit = VibrationFeatures(
             **asdict(time_features),
