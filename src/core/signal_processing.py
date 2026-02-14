@@ -109,7 +109,10 @@ def apply_noise_reduction_filter(
     fs_hz: int,
     filter_type: NoiseReductionFilterType,
     notch_freq_hz: Optional[float] = None,
-    notch_q_factor: Optional[float] = None
+    notch_q_factor: Optional[float] = None,
+    band_stop_low_hz: Optional[float] = None, # Added for BSF
+    band_stop_high_hz: Optional[float] = None, # Added for BSF
+    band_stop_order: int = 4 # Added for BSF
 ) -> np.ndarray:
     """
     Applies a noise reduction filter to the signal based on the specified type.
@@ -120,6 +123,9 @@ def apply_noise_reduction_filter(
         filter_type: Type of noise reduction filter to apply.
         notch_freq_hz: Center frequency for the notch filter (Hz). Required if filter_type is NOTCH.
         notch_q_factor: Q-factor for the notch filter. Required if filter_type is NOTCH.
+        band_stop_low_hz: Lower cutoff frequency for the band-stop filter (Hz). Required if filter_type is BAND_STOP.
+        band_stop_high_hz: Upper cutoff frequency for the band-stop filter (Hz). Required if filter_type is BAND_STOP.
+        band_stop_order: Order for the band-stop filter. Required if filter_type is BAND_STOP.
 
     Returns:
         np.ndarray: Filtered signal.
@@ -144,6 +150,17 @@ def apply_noise_reduction_filter(
         b, a = signal.iirnotch(notch_freq_hz, notch_q_factor, fs_hz)
         # Apply filter forward and backward to avoid phase distortion
         filtered_data = signal.filtfilt(b, a, data)
+        return filtered_data
+    
+    elif filter_type == NoiseReductionFilterType.BAND_STOP:
+        if band_stop_low_hz is None or band_stop_high_hz is None:
+            raise ValueError("band_stop_low_hz and band_stop_high_hz are required for BAND_STOP filter.")
+        if not (0 < band_stop_low_hz < band_stop_high_hz < fs_hz / 2):
+            raise ValueError(f"Band-stop frequencies ({band_stop_low_hz}-{band_stop_high_hz} Hz) must be between 0 and Nyquist frequency ({fs_hz / 2} Hz) and low_hz < high_hz.")
+
+        # Design Butterworth band-stop filter
+        sos = signal.butter(band_stop_order, [band_stop_low_hz, band_stop_high_hz], btype='bandstop', fs=fs_hz, output='sos')
+        filtered_data = signal.sosfilt(sos, data)
         return filtered_data
     
     else:

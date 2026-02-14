@@ -17,6 +17,6 @@
 - [x] ISSUE-015: Noise Reduction Filter - Backend Implementation [CLOSED]
 - [x] ISSUE-016: Noise Reduction Filter - Streamlit UI Integration [CLOSED]
 - [x] ISSUE-017: Noise Reduction Filter - Unit and Integration Tests [CLOSED]
-- [ ] ISSUE-018: Multi-Algorithm Noise Reduction - Model & Backend Extension [OPEN]
-- [ ] ISSUE-019: Multi-Algorithm Noise Reduction - Streamlit UI Enhancement [OPEN]
+- [x] ISSUE-018: Multi-Algorithm Noise Reduction - Model & Backend Extension [CLOSED]
+- [x] ISSUE-019: Multi-Algorithm Noise Reduction - Streamlit UI Enhancement [CLOSED]
 - [ ] ISSUE-020: Multi-Algorithm Noise Reduction - Comprehensive Testing [OPEN]

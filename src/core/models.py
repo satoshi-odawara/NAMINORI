@@ -26,7 +26,7 @@ class WindowFunction(Enum):
 class NoiseReductionFilterType(Enum):
     NONE = "none"
     NOTCH = "notch" # ノッチフィルタ (特定の周波数を除去)
-    # 将来的に他のノイズ除去フィルタを追加可能
+    BAND_STOP = "band_stop" # バンドストップフィルタ (特定の周波数帯域を除去)
 
 @dataclass
 class AnalysisConfig:
@@ -41,6 +41,9 @@ class AnalysisConfig:
     noise_reduction_type: NoiseReductionFilterType = NoiseReductionFilterType.NONE
     notch_freq_hz: Optional[float] = None # ノッチフィルタの中心周波数
     notch_q_factor: Optional[float] = None # ノッチフィルタのQ値 (帯域幅の逆数)
+    band_stop_low_hz: Optional[float] = None # バンドストップフィルタの下限周波数
+    band_stop_high_hz: Optional[float] = None # バンドストップフィルタの上限周波数
+    band_stop_order: int = 4 # バンドストップフィルタの次数
 
 @dataclass
 class QualityMetrics:

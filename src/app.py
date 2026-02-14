@@ -25,11 +25,20 @@ def get_serializable_audit_log(result: AnalysisResult) -> dict:
     log_data = asdict(result)
     log_data['config']['quantity'] = result.config.quantity.value
     log_data['config']['window'] = result.config.window.value
-    log_data['config']['noise_reduction_type'] = result.config.noise_reduction_type.value # Add this
-    if result.config.notch_freq_hz:
+    log_data['config']['noise_reduction_type'] = result.config.noise_reduction_type.value
+    
+    # Conditionally add filter parameters to avoid cluttering the log with None values
+    if result.config.notch_freq_hz is not None:
         log_data['config']['notch_freq_hz'] = result.config.notch_freq_hz
-    if result.config.notch_q_factor:
+    if result.config.notch_q_factor is not None:
         log_data['config']['notch_q_factor'] = result.config.notch_q_factor
+    if result.config.band_stop_low_hz is not None:
+        log_data['config']['band_stop_low_hz'] = result.config.band_stop_low_hz
+    if result.config.band_stop_high_hz is not None:
+        log_data['config']['band_stop_high_hz'] = result.config.band_stop_high_hz
+    if result.config.noise_reduction_type == NoiseReductionFilterType.BAND_STOP:
+         log_data['config']['band_stop_order'] = result.config.band_stop_order
+
     return log_data
 
 # --- Sidebar ---
@@ -107,10 +116,17 @@ if uploaded_file:
         nr_type = st.sidebar.selectbox("ノイズ除去タイプ", list(NoiseReductionFilterType), format_func=lambda x: x.value, key="nr_type")
         nr_freq = None
         nr_q = None
+        bs_low_hz = None
+        bs_high_hz = None
+        bs_order = 4 # Default value
 
         if nr_type == NoiseReductionFilterType.NOTCH:
             nr_freq = st.sidebar.number_input("ノッチ周波数 (Hz)", 0.0, nyquist, 60.0, key="nr_freq")
             nr_q = st.sidebar.number_input("ノッチQ値", 0.1, 100.0, 30.0, key="nr_q")
+        elif nr_type == NoiseReductionFilterType.BAND_STOP:
+            bs_low_hz = st.sidebar.number_input("バンドストップ下限周波数 (Hz)", 0.0, nyquist, 50.0, key="bs_low")
+            bs_high_hz = st.sidebar.number_input("バンドストップ上限周波数 (Hz)", 0.0, nyquist, 70.0, key="bs_high")
+            bs_order = st.sidebar.number_input("バンドストップ次数", 1, 10, 4, key="bs_order")
 
         st.sidebar.header("FFTピーク設定")
         top_n_peaks = st.sidebar.slider("ピーク表示数", 1, 20, 5, key="peak_count")
@@ -124,7 +140,10 @@ if uploaded_file:
             order,
             noise_reduction_type=nr_type,
             notch_freq_hz=float(nr_freq) if nr_freq else None,
-            notch_q_factor=float(nr_q) if nr_q else None
+            notch_q_factor=float(nr_q) if nr_q else None,
+            band_stop_low_hz=float(bs_low_hz) if bs_low_hz else None,
+            band_stop_high_hz=float(bs_high_hz) if bs_high_hz else None,
+            band_stop_order=bs_order
         )
 
         with st.container():
@@ -144,11 +163,18 @@ if uploaded_file:
             
             # ノイズ除去フィルタの表示
             if config.noise_reduction_type != NoiseReductionFilterType.NONE:
-                st.markdown(f"""
-                **ノイズ除去フィルタ:** `{config.noise_reduction_type.value}`
-                - 周波数: `{config.notch_freq_hz or 'N/A'} Hz`
-                - Q値: `{config.notch_q_factor or 'N/A'}`
-                """)
+                nr_details = f"**ノイズ除去フィルタ:** `{config.noise_reduction_type.value}`"
+                if config.noise_reduction_type == NoiseReductionFilterType.NOTCH:
+                    nr_details += f"""
+                    - 周波数: `{config.notch_freq_hz or 'N/A'} Hz`
+                    - Q値: `{config.notch_q_factor or 'N/A'}`
+                    """
+                elif config.noise_reduction_type == NoiseReductionFilterType.BAND_STOP:
+                    nr_details += f"""
+                    - 帯域: `{config.band_stop_low_hz or 'N/A'} Hz - {config.band_stop_high_hz or 'N/A'} Hz`
+                    - 次数: `{config.band_stop_order}`
+                    """
+                st.markdown(nr_details)
         st.write("---")
 
         processed = remove_dc_offset(data_raw)
@@ -165,7 +191,10 @@ if uploaded_file:
             fs_hz,
             config.noise_reduction_type,
             config.notch_freq_hz,
-            config.notch_q_factor
+            config.notch_q_factor,
+            config.band_stop_low_hz,
+            config.band_stop_high_hz,
+            config.band_stop_order
         )
         
         time_features = calculate_time_domain_features(processed)

@@ -4,7 +4,7 @@ This document outlines the development plan for the vibration analysis web appli
 
 ---
 
-## Phase 1: Core Signal Processing & Feature Extraction (Backend Refactoring) - IN PROGRESS
+## Phase 1: Core Signal Processing & Feature Extraction (Backend Refactoring) - COMPLETED
 
 **Objective:** Refactor the existing `analyze_vibration_full` function into modular, testable components as per the recommended project structure, ensuring all `GEMINI.md` signal processing rules are met.
 
@@ -19,7 +19,7 @@ This document outlines the development plan for the vibration analysis web appli
 5.  **Audit Log Management (`src/utils/audit_log.py`):** COMPLETED
 6.  **Comprehensive Unit Testing (`tests/test_*.py`):** COMPLETED
 7.  **Implement Noise Reduction Filters (Backend):** COMPLETED
-8.  **Implement Multiple Noise Reduction Algorithms (Backend):** NOT STARTED
+8.  **Implement Multiple Noise Reduction Algorithms (Backend):** COMPLETED
 
 ## Phase 2: MT Method Implementation (Backend) - COMPLETED
 
@@ -48,7 +48,7 @@ This document outlines the development plan for the vibration analysis web appli
 5.  **MT Method UI:** COMPLETED
 6.  **Audit Log UI:** COMPLETED
 7.  **Integrate Noise Reduction Filter UI:** COMPLETED
-8.  **Integrate Multi-Algorithm Noise Reduction UI:** NOT STARTED
+8.  **Integrate Multi-Algorithm Noise Reduction UI:** COMPLETED
 
 ## Phase 4: Testing, CI/CD & Documentation - IN PROGRESS
 
