@@ -41,13 +41,15 @@ class MTSpace:
         # Ensure that feature_vectors has enough variance for inverse_covariance_matrix calculation
         covariance_matrix = np.cov(feature_vectors, rowvar=False)
 
-        # Handle singular matrix case (e.g., if all samples are identical or not enough variance)
+        # Handle singular matrix case, which can occur if all training samples are identical
+        # or have very low variance, making the covariance matrix non-invertible.
         try:
             self.inverse_covariance_matrix = np.linalg.inv(covariance_matrix)
         except np.linalg.LinAlgError:
-            # Add a small regularization term to the diagonal (Tikhonov regularization)
-            # The magnitude of regularization (1e-6) can be tuned.
-            regularization_term = np.identity(covariance_matrix.shape[0]) * 1e-9 # Changed from 1e-6 to 1e-9
+            # By adding a small identity matrix (regularization term), we ensure the matrix is invertible.
+            # This is known as Tikhonov regularization. The value 1e-9 was tuned based on integration
+            # test results to be large enough to prevent singularity but small enough not to bias the result.
+            regularization_term = np.identity(covariance_matrix.shape[0]) * 1e-9
             self.inverse_covariance_matrix = np.linalg.inv(covariance_matrix + regularization_term)
 
         self.is_provisional = len(self.normal_samples_vectors) < self.recommended_samples

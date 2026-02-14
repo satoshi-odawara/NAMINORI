@@ -8,6 +8,17 @@ class SignalQuantity(Enum):
     VELOCITY = "velocity"
     DISPLACEMENT = "disp"
 
+    @property
+    def unit_str(self) -> str:
+        """Returns the string representation of the unit for the quantity."""
+        if self == SignalQuantity.ACCEL:
+            return "m/s^2"
+        elif self == SignalQuantity.VELOCITY:
+            return "mm/s"
+        elif self == SignalQuantity.DISPLACEMENT:
+            return "μm"
+        return ""
+
 class WindowFunction(Enum):
     HANNING = "hanning"
     FLATTOP = "flattop"
@@ -29,14 +40,18 @@ class QualityMetrics:
     data_length_s: float  # 有効データ長
 
 @dataclass
-class VibrationFeatures:
-    """振動特徴量（MT法対応）"""
+class TimeDomainFeatures:
+    """Time-domain vibration features"""
     rms: float
     peak: float
     kurtosis: float
     skewness: float
     crest_factor: float
     shape_factor: float
+
+@dataclass
+class VibrationFeatures(TimeDomainFeatures):
+    """Vibration features including frequency-domain power bands"""
     power_low: float
     power_mid: float
     power_high: float

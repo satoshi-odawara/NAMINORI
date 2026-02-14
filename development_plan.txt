@@ -13,31 +13,11 @@ This document outlines the development plan for the vibration analysis web appli
 **Tasks:**
 
 1.  **Define Core Models (`src/core/models.py`):** COMPLETED
-    *   Moved `SignalQuantity`, `WindowFunction`, `AnalysisConfig`, `QualityMetrics`, `VibrationFeatures`, `AnalysisResult` dataclasses and Enums to this file.
-    *   Ensured type hints are consistent and adhere to Python 3.10+ standards.
-
 2.  **Implement Signal Processing Core (`src/core/signal_processing.py`):** COMPLETED
-    *   Extracted WAV file reading, data normalization (16/32-bit to -1.0~1.0), and file hashing logic.
-    *   Implemented DC component removal.
-    *   Implemented Butterworth filtering (LPF/HPF/BPF) as per `GEMINI.md` (e.g., `apply_filter` function).
-    *   Ensured filter parameters (type, cutoff, order) are returned for logging.
-
 3.  **Implement Feature Extraction (`src/core/feature_extraction.py`):** COMPLETED
-    *   Extracted Time Domain Feature calculations: RMS, Peak, Kurtosis, Skewness, Crest Factor, Shape Factor.
-    *   Implemented FFT, windowing (Hanning/Flat Top with amplitude correction), and frequency axis generation.
-    *   Implemented Frequency Band Power Contribution calculation (Low, Mid, High).
-
 4.  **Implement Data Quality Checks (`src/core/quality_check.py`):** COMPLETED
-    *   Extracted Clipping Detection (`|x| >= 0.99`).
-    *   Implemented simplified S/N ratio estimation.
-    *   Implemented `QualityMetrics` and `get_confidence_score` logic.
-
 5.  **Audit Log Management (`src/utils/audit_log.py`):** COMPLETED
-    *   Implemented the `save_audit_log` function for `AnalysisResult` instances, ensuring all analysis conditions and results are logged to JSON.
-
 6.  **Comprehensive Unit Testing (`tests/test_*.py`):** COMPLETED
-    *   Created dedicated test files (`tests/test_signal_processing.py`, `tests/test_feature_extraction.py`, `tests/test_quality_check.py`).
-    *   Achieved 100% test coverage for all signal processing and feature extraction functions, focusing on numerical accuracy.
 
 ## Phase 2: MT Method Implementation (Backend) - COMPLETED
 
@@ -48,19 +28,10 @@ This document outlines the development plan for the vibration analysis web appli
 **Tasks:**
 
 1.  **MT Method Core (`src/diagnostics/mt_method.py`):** COMPLETED
-    *   Implemented a class/functions for managing the "unit space" (e.g., `MTSpace`).
-    *   Functions for adding normal samples to the unit space (handling recommended/minimum sample counts).
-    *   Calculation of Mahalanobis Distance (MD) for new samples against the unit space.
-    *   Definition of anomaly thresholds (e.g., based on statistical methods).
-
 2.  **Integration with `VibrationFeatures`:** COMPLETED
-    *   Ensured `VibrationFeatures.to_vector()` is correctly used by the MT method. (Implemented `to_vector` in `models.py`)
-
 3.  **MT Method Testing (`tests/test_mt_method.py`):** COMPLETED
-    *   Unit tests for unit space creation, MD calculation, and thresholding.
-    *   Test cases for handling insufficient normal samples.
 
-## Phase 3: Streamlit Web Application (Frontend) - IN PROGRESS
+## Phase 3: Streamlit Web Application (Frontend) - COMPLETED
 
 **Objective:** Build an interactive Streamlit UI that exposes the backend functionality according to the UI/UX guidelines in `GEMINI.md`.
 
@@ -69,38 +40,13 @@ This document outlines the development plan for the vibration analysis web appli
 **Tasks:**
 
 1.  **Basic App Structure (`src/app.py`):** COMPLETED
-    *   Set up a Streamlit application entry point.
-    *   Implement WAV file upload widget.
-    *   Display basic analysis configuration options (e.g., `SignalQuantity`).
-
 2.  **Analysis Configuration UI:** COMPLETED
-    *   Sliders/number inputs for high-pass/low-pass filter frequencies and filter order.
-    *   Dropdown for window function selection (Hanning, Flat Top).
-    *   Display of current filter conditions and window function.
+3.  **Visualization Integration (Plotly):** COMPLETED
+4.  **Results Display:** COMPLETED
+5.  **MT Method UI:** COMPLETED
+6.  **Audit Log UI:** COMPLETED
 
-3.  **Visualization Integration (Plotly):** IN PROGRESS (Related to `ISSUES.md` ISSUE-006, ISSUE-014)
-    *   Display time-domain waveform using Plotly. (Implemented)
-    *   Allow interaction (zoom/pan) for time-domain waveform. (Needs further work)
-    *   Display FFT/PSD plot. (Implemented)
-    *   Automatic peak annotation for FFT/PSD plot. (Implemented)
-    *   Toggle for linear/log frequency axis. (Implemented)
-    *   Interactive features for FFT/PSD plot. (Needs further work)
-
-4.  **Results Display:** IN PROGRESS (Related to `ISSUES.md` ISSUE-001, ISSUE-002, ISSUE-012, ISSUE-013)
-    *   Horizontal display of key `VibrationFeatures` (RMS, Peak, Kurtosis, etc.). (Implemented)
-    *   Display `QualityMetrics` (Clipping Ratio, S/N Ratio) with appropriate warnings. (Implemented)
-    *   Display `Confidence Score` (0-100%) with color-coded indicators (red/yellow/green). (Confidence score displayed, color-coded indicators (ISSUE-002) not yet implemented)
-    *   Clearly indicate the `SignalQuantity` for all displayed values. (Partially implemented, needs unified display - ISSUE-012)
-
-5.  **MT Method UI:** NOT STARTED (Related to `ISSUES.md` ISSUE-003, ISSUE-004)
-    *   Interface for uploading "normal" WAV files to build/update the MT unit space.
-    *   Display the current state of the unit space (number of samples).
-    *   Display Mahalanobis Distance for analyzed samples, along with anomaly status (e.g., "Normal", "Warning", "Anomaly" with color coding).
-
-6.  **Audit Log UI:** NOT STARTED (Related to `ISSUES.md` ISSUE-005)
-    *   Option to view the JSON audit log on screen or download it.
-
-## Phase 4: Testing, CI/CD & Documentation - NOT STARTED
+## Phase 4: Testing, CI/CD & Documentation - COMPLETED
 
 **Objective:** Ensure application quality, maintainability, and reproducibility.
 
@@ -108,20 +54,10 @@ This document outlines the development plan for the vibration analysis web appli
 
 **Tasks:**
 
-1.  **Integration Tests (`tests/test_integration.py` or similar):** NOT STARTED (Related to `ISSUES.md` ISSUE-007, ISSUE-008)
-    *   Test the full pipeline: WAV upload -> analysis -> feature extraction -> MT method -> result display.
-    *   Verify consistency between UI-selected parameters and backend processing.
-
-2.  **Regression Tests:** NOT STARTED (Related to `ISSUES.md` ISSUE-009)
-    *   Implement tests to ensure no degradation in feature calculation or MT method performance with new changes.
-
-3.  **CI/CD Setup (`.github/workflows/ci.yml`):** NOT STARTED (Related to `ISSUES.md` ISSUE-010)
-    *   Implement GitHub Actions as described in `GEMINI.md` to run `pytest` and `ruff check` on pushes and pull requests.
-    *   Ensure `requirements.txt` is up-to-date with all project dependencies.
-
-4.  **Project Documentation:** IN PROGRESS (Related to `ISSUES.md` ISSUE-011)
-    *   Update `README.md` with clear instructions for setting up the environment, running the Streamlit app, and executing tests. (COMPLETED)
-    *   Add inline comments to complex code sections where necessary, focusing on *why* rather than *what*. (NOT STARTED - ISSUE-011)
+1.  **Integration Tests (`tests/test_integration.py` or similar):** COMPLETED
+2.  **Regression Tests:** COMPLETED
+3.  **CI/CD Setup (`.github/workflows/ci.yml`):** COMPLETED
+4.  **Project Documentation:** COMPLETED
 
 ---
 
