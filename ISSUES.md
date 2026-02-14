@@ -1,7 +1,7 @@
 # Project Issues
 
 - [x] ISSUE-001: Streamlit UI - KPIの横並び表示を実装 [CLOSED]
-- [ ] ISSUE-002: Streamlit UI - 診断信頼度に基づいた色分けインジケータの実装 (赤・黄・緑) [OPEN]
+- [x] ISSUE-002: Streamlit UI - 診断信頼度に基づいた色分けインジケータの実装 (赤・黄・緑) [CLOSED]
 - [ ] ISSUE-003: Streamlit UI - MT法のための正常WAVファイルアップロード機能と単位空間構築UIの実装 [OPEN]
 - [ ] ISSUE-004: Streamlit UI - 解析されたデータに対するマハラノビス距離と異常ステータスの表示 [OPEN]
 - [ ] ISSUE-005: Streamlit UI - 監査ログ（JSON）の画面表示およびダウンロード機能の実装 [OPEN]
