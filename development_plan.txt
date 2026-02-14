@@ -62,7 +62,7 @@ This document outlines the development plan for the vibration analysis web appli
 2.  **Regression Tests:** COMPLETED
 3.  **CI/CD Setup (`.github/workflows/ci.yml`):** COMPLETED
 4.  **Project Documentation:** COMPLETED
-5.  **Add Comprehensive Tests for Multiple Noise Reduction Algorithms:** NOT STARTED
+5.  **Add Comprehensive Tests for Multiple Noise Reduction Algorithms:** COMPLETED
 
 ---
 

@@ -53,19 +53,18 @@ def calculate_fft_features(
     """
     if window_type == WindowFunction.HANNING:
         window = np.hanning(len(data))
-        # This factor compensates for energy loss from the Hanning window.
-        # For a pure sine wave with amplitude A, the FFT peak will be approx. A.
-        amp_correction_factor = 2.0
     else:  # FLATTOP
         window = signal.windows.flattop(len(data))
-        # The Flat Top window has a wider peak but is more accurate for amplitude measurements.
-        # This specific factor is used to get the correct amplitude for a sine wave.
-        amp_correction_factor = 4.18
 
     data_windowed = data * window
     fft_result = np.fft.rfft(data_windowed)
     freq_hz = np.fft.rfftfreq(len(data_windowed), d=1/fs_hz)
-    magnitude = np.abs(fft_result) * amp_correction_factor / len(data_windowed)
+
+    # Correct amplitude scaling: 2.0 * |FFT| / sum(window)
+    # The 2.0x is to account for the positive frequencies only (from rfft)
+    # DC component (at index 0) and Nyquist component (last index, if present) should not be doubled.
+    magnitude = np.abs(fft_result) / np.sum(window)
+    magnitude[1:] *= 2
 
     total_power = np.sum(magnitude**2)
 

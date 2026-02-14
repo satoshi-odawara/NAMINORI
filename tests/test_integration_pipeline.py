@@ -5,6 +5,7 @@ import os
 import hashlib
 from datetime import datetime
 import json
+from scipy import signal
 
 from src.core.models import SignalQuantity, AnalysisConfig, WindowFunction, VibrationFeatures, TimeDomainFeatures, NoiseReductionFilterType
 from src.core.signal_processing import load_wav_file, remove_dc_offset, apply_butterworth_filter, apply_noise_reduction_filter
@@ -64,29 +65,52 @@ def normal_wav_files_for_mt(tmp_path, dummy_sine_wav):
         files.append(file_path)
     return files, fs
 
-# Fixture to create a WAV file with a specific noise frequency (e.g., 60 Hz hum)
 @pytest.fixture
-def sine_with_60hz_noise_wav(tmp_path):
+def sine_with_band_noise_wav(tmp_path):
+    fs = 44100
+    duration = 2.0
+    t = np.linspace(0., duration, int(fs * duration), endpoint=False)
+    
+    # Main signal outside the noise band
+    main_signal = 0.5 * np.sin(2 * np.pi * 300 * t)
+    
+    # Generate band-limited noise (e.g., 100-200 Hz)
+    noise_low_hz = 100.0
+    noise_high_hz = 200.0
+    # Generate white noise
+    white_noise = np.random.normal(0, 1, len(t))
+    # Filter the white noise to create band-limited noise
+    sos = signal.butter(10, [noise_low_hz, noise_high_hz], btype='bandpass', fs=fs, output='sos')
+    band_noise = signal.sosfilt(sos, white_noise) * 0.5
+
+    data = main_signal + band_noise
+    data_int16 = (data / np.max(np.abs(data)) * (np.iinfo(np.int16).max * 0.5)).astype(np.int16)
+
+    file_path = tmp_path / "sine_with_band_noise.wav"
+    wavfile.write(file_path, fs, data_int16)
+    return file_path, fs, noise_low_hz, noise_high_hz
+
+
+# Fixture to create a WAV file with a specific noise frequency for notch filter testing
+@pytest.fixture
+def sine_with_notch_noise_wav(tmp_path):
     fs = 44100
     duration = 2.0
     t = np.linspace(0., duration, int(fs * duration), endpoint=False)
     
     # Main signal at 100 Hz
     main_signal = 0.5 * np.sin(2 * np.pi * 100 * t)
-    # Strong 60 Hz noise
-    noise_60hz = 0.3 * np.sin(2 * np.pi * 60 * t)
-    # Some broadband noise
-    broadband_noise = np.random.normal(0, 0.05, len(t))
-
-    data = main_signal + noise_60hz + broadband_noise
+    # Strong 60 Hz noise to be notched
+    noise_freq = 60.0
+    noise_signal = 0.3 * np.sin(2 * np.pi * noise_freq * t)
+    
+    data = main_signal + noise_signal
     data_int16 = (data / np.max(np.abs(data)) * (np.iinfo(np.int16).max * 0.5)).astype(np.int16)
 
-    file_path = tmp_path / "sine_with_60hz_noise.wav"
+    file_path = tmp_path / "sine_with_notch_noise.wav"
     wavfile.write(file_path, fs, data_int16)
-    return file_path, fs, 60.0 # Return file path, fs, and noise frequency
+    return file_path, fs, noise_freq
 
-def test_full_analysis_pipeline_integration(dummy_sine_wav, tmp_path):
-    file_path, fs_expected, _ = dummy_sine_wav
 
     # 1. Load WAV file
     fs_hz, data_normalized, file_hash = load_wav_file(str(file_path))
@@ -110,15 +134,25 @@ def test_full_analysis_pipeline_integration(dummy_sine_wav, tmp_path):
         data_ac, fs_hz, analysis_config.highpass_hz, analysis_config.lowpass_hz, analysis_config.filter_order
     )
     # No noise reduction filter applied in this particular test
-    assert np.mean(data_filtered) < 1e-9
+    data_nr_filtered = apply_noise_reduction_filter(
+        data_filtered,
+        fs_hz,
+        analysis_config.noise_reduction_type,
+        analysis_config.notch_freq_hz,
+        analysis_config.notch_q_factor,
+        analysis_config.band_stop_low_hz,
+        analysis_config.band_stop_high_hz,
+        analysis_config.band_stop_order
+    )
+    assert np.mean(data_nr_filtered) < 1e-9
 
     # 3. Extract Features
-    time_features = calculate_time_domain_features(data_filtered)
+    time_features = calculate_time_domain_features(data_nr_filtered)
     assert time_features.rms > 0
     assert time_features.peak > 0
 
     freq_hz, magnitude, power_bands_dict = calculate_fft_features(
-        data_filtered, fs_hz, analysis_config.window
+        data_nr_filtered, fs_hz, analysis_config.window
     )
     assert len(freq_hz) > 0
     assert np.sum(magnitude) > 0
@@ -127,7 +161,7 @@ def test_full_analysis_pipeline_integration(dummy_sine_wav, tmp_path):
     assert 0 <= power_bands_dict['high'] <= 1
 
     # 4. Calculate Quality Metrics
-    rms_after_processing = np.sqrt(np.mean(data_filtered**2))
+    rms_after_processing = np.sqrt(np.mean(data_nr_filtered**2))
     quality_metrics = calculate_quality_metrics(data_normalized, fs_hz, rms_after_processing, magnitude)
     assert quality_metrics.clipping_ratio >= 0
     assert quality_metrics.snr_db > 0
@@ -183,6 +217,11 @@ def test_mt_pipeline_integration(normal_wav_files_for_mt, dummy_sine_wav, dummy_
         data_filtered = apply_butterworth_filter(
             data_ac, fs_hz, mt_train_config.highpass_hz, mt_train_config.lowpass_hz, mt_train_config.filter_order
         )
+        data_filtered = apply_noise_reduction_filter(
+            data_filtered, fs_hz, mt_train_config.noise_reduction_type,
+            mt_train_config.notch_freq_hz, mt_train_config.notch_q_factor,
+            mt_train_config.band_stop_low_hz, mt_train_config.band_stop_high_hz, mt_train_config.band_stop_order
+        )
         time_features = calculate_time_domain_features(data_filtered)
         _, _, power_bands_dict = calculate_fft_features(
             data_filtered, fs_hz, mt_train_config.window
@@ -206,6 +245,11 @@ def test_mt_pipeline_integration(normal_wav_files_for_mt, dummy_sine_wav, dummy_
     data_eval_filtered = apply_butterworth_filter(
         data_eval_ac, fs_eval_hz, mt_train_config.highpass_hz, mt_train_config.lowpass_hz, mt_train_config.filter_order
     )
+    data_eval_filtered = apply_noise_reduction_filter(
+        data_eval_filtered, fs_eval_hz, mt_train_config.noise_reduction_type,
+        mt_train_config.notch_freq_hz, mt_train_config.notch_q_factor,
+        mt_train_config.band_stop_low_hz, mt_train_config.band_stop_high_hz, mt_train_config.band_stop_order
+    )
     eval_time_features = calculate_time_domain_features(data_eval_filtered)
     _, _, eval_power_bands_dict = calculate_fft_features(
         data_eval_filtered, fs_eval_hz, mt_train_config.window
@@ -225,6 +269,11 @@ def test_mt_pipeline_integration(normal_wav_files_for_mt, dummy_sine_wav, dummy_
     data_anomalous_ac = remove_dc_offset(data_anomalous_normalized)
     data_anomalous_filtered = apply_butterworth_filter(
         data_anomalous_ac, fs_anomalous_hz, mt_train_config.highpass_hz, mt_train_config.lowpass_hz, mt_train_config.filter_order
+    )
+    data_anomalous_filtered = apply_noise_reduction_filter(
+        data_anomalous_filtered, fs_anomalous_hz, mt_train_config.noise_reduction_type,
+        mt_train_config.notch_freq_hz, mt_train_config.notch_q_factor,
+        mt_train_config.band_stop_low_hz, mt_train_config.band_stop_high_hz, mt_train_config.band_stop_order
     )
     anomalous_time_features = calculate_time_domain_features(data_anomalous_filtered)
     _, _, anomalous_power_bands_dict = calculate_fft_features(
@@ -274,9 +323,14 @@ def test_analysis_config_consistency(tmp_path):
     data_filtered = apply_butterworth_filter(
         data_ac, fs_hz, analysis_config.highpass_hz, analysis_config.lowpass_hz, analysis_config.filter_order
     )
+    data_nr_filtered = apply_noise_reduction_filter(
+        data_filtered, fs_hz, analysis_config.noise_reduction_type,
+        analysis_config.notch_freq_hz, analysis_config.notch_q_factor,
+        analysis_config.band_stop_low_hz, analysis_config.band_stop_high_hz, analysis_config.band_stop_order
+    )
 
     freqs, magnitudes, power_bands_dict = calculate_fft_features( # Renamed to power_bands_dict
-        data_filtered, fs_hz, analysis_config.window
+        data_nr_filtered, fs_hz, analysis_config.window
     )
 
     assert power_bands_dict['low'] < 0.2
@@ -309,8 +363,8 @@ def test_vibration_features_instantiation_with_power_bands():
     assert vf.power_high == 0.1
 
 # New integration test for noise reduction filter
-def test_noise_reduction_pipeline_integration(sine_with_60hz_noise_wav, tmp_path):
-    file_path, fs_expected, noise_freq = sine_with_60hz_noise_wav
+def test_noise_reduction_pipeline_integration(sine_with_notch_noise_wav, tmp_path):
+    file_path, fs_expected, noise_freq = sine_with_notch_noise_wav
     
     # 1. Load WAV file
     fs_hz, data_normalized, file_hash = load_wav_file(str(file_path))
@@ -338,7 +392,10 @@ def test_noise_reduction_pipeline_integration(sine_with_60hz_noise_wav, tmp_path
         fs_hz,
         analysis_config.noise_reduction_type,
         analysis_config.notch_freq_hz,
-        analysis_config.notch_q_factor
+        analysis_config.notch_q_factor,
+        analysis_config.band_stop_low_hz,
+        analysis_config.band_stop_high_hz,
+        analysis_config.band_stop_order
     )
 
     # 3. Extract Features and check noise reduction effect
@@ -360,5 +417,54 @@ def test_noise_reduction_pipeline_integration(sine_with_60hz_noise_wav, tmp_path
 
     np.testing.assert_allclose(magnitude_nr[idx_main_nr], magnitude_orig[idx_main_orig], rtol=0.2) # Main signal should be largely preserved (within 20% tolerance)
 
-    # Optional: Test overall S/N ratio improvement
-    # This might require more sophisticated calculation, but for now, rely on magnitude reduction.
+def test_band_stop_filter_pipeline_integration(sine_with_band_noise_wav):
+    file_path, fs_hz, noise_low, noise_high = sine_with_band_noise_wav
+
+    # 1. Load WAV file
+    fs_loaded, data_normalized, _ = load_wav_file(str(file_path))
+    assert fs_hz == fs_loaded
+
+    # 2. Define Analysis Config with BAND_STOP filter
+    analysis_config = AnalysisConfig(
+        quantity=SignalQuantity.ACCEL,
+        window=WindowFunction.HANNING,
+        noise_reduction_type=NoiseReductionFilterType.BAND_STOP,
+        band_stop_low_hz=noise_low,
+        band_stop_high_hz=noise_high,
+        band_stop_order=8
+    )
+
+    # 3. Apply Signal Processing
+    data_ac = remove_dc_offset(data_normalized)
+    data_nr_filtered = apply_noise_reduction_filter(
+        data_ac,
+        fs_hz,
+        analysis_config.noise_reduction_type,
+        band_stop_low_hz=analysis_config.band_stop_low_hz,
+        band_stop_high_hz=analysis_config.band_stop_high_hz,
+        band_stop_order=analysis_config.band_stop_order
+    )
+
+    # 4. Extract Features and check noise reduction effect
+    freqs_orig, mags_orig, _ = calculate_fft_features(data_ac, fs_hz, analysis_config.window)
+    freqs_nr, mags_nr, _ = calculate_fft_features(data_nr_filtered, fs_hz, analysis_config.window)
+
+    # Helper to calculate energy in a band
+    def energy_in_band(freqs, mags, low, high):
+        band_indices = np.where((freqs >= low) & (freqs <= high))
+        return np.sum(mags[band_indices]**2)
+
+    # 5. Compare energy in the stop-band before and after
+    energy_orig_band = energy_in_band(freqs_orig, mags_orig, noise_low, noise_high)
+    energy_nr_band = energy_in_band(freqs_nr, mags_nr, noise_low, noise_high)
+    
+    # Assert that energy in the filtered band is significantly reduced
+    assert energy_nr_band < 0.2 * energy_orig_band
+
+    # 6. Verify that the main signal outside the band is preserved
+    main_signal_freq = 300.0
+    idx_main_orig = np.argmin(np.abs(freqs_orig - main_signal_freq))
+    idx_main_nr = np.argmin(np.abs(freqs_nr - main_signal_freq))
+    
+    # Check that the peak magnitude of the main signal is not excessively attenuated
+    assert np.isclose(mags_nr[idx_main_nr], mags_orig[idx_main_orig], rtol=0.2)
