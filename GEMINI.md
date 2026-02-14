@@ -339,6 +339,13 @@ jobs:
 * [Developer] は、[OPEN] のタスクを実装し、完了後に [CLOSED] へ更新すること。
 * [QA/Expert] は、各イシューが閉じられる前に規約チェックを行うこと。
 
+## 18. 開発計画管理規定
+
+* プロジェクトの開発計画(全体像)は `development_plan.txt` で管理する。
+* `development_plan.txt` は日本語で記載する。
+* [Architect] は、各イシューが閉じられた際、`development_plan.txt`の進捗状況を更新する。
+* [Architect] は、ユーザに、`development_plan.txt`のアップデートを相談することができる。
+
 ## 改訂履歴
 
 * 2026-02-14: ISSUES管理規定を追記と軽微なフォーマット変更
