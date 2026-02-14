@@ -235,6 +235,8 @@ if uploaded_file is not None:
                 height=300,
                 margin=dict(l=20, r=20, t=40, b=20)
             )
+            # Add range slider to time-domain plot
+            fig_time.update_xaxes(rangeslider_visible=True)
             st.plotly_chart(fig_time, use_container_width=True)
 
 
@@ -400,28 +402,25 @@ else:
     st.info("評価用WAVファイルをアップロードして解析を開始してください。")
 
 # --- Audit Log Section ---
-# This section needs to be outside the 'if uploaded_file is not None' block
-# so that the AnalysisResult object is available to generate and download the log
-# after processing.
-# Moving this to outside of the uploaded_file block to ensure it's always accessible
-# after analysis is complete.
 if uploaded_file is not None and 'fs_hz' in locals(): # Ensure analysis has run
-    # Construct AnalysisResult object
-    # The datetime.now().isoformat() should be captured when analysis starts
-    # For now, let's reconstruct it if analysis completes successfully.
-    # This part needs to be carefully placed to ensure all variables are in scope.
     try:
         current_timestamp = datetime.now().isoformat()
         
-        # Ensure all necessary variables are available from the try block above
-        # This means moving the AnalysisResult construction inside the try block
-        # and storing it in session_state or passing it around.
-        
-        # For simplicity for this issue, let's create a dummy AnalysisResult for display if not fully in scope.
-        # But ideally, the AnalysisResult should be the actual result of the analysis.
-        # Let's assume the analysis_config, time_features, quality, etc. are available.
+        # Reconstruct evaluation_features using actual values from analysis
+        evaluation_features = VibrationFeatures(
+            rms=time_features.rms,
+            peak=time_features.peak,
+            kurtosis=time_features.kurtosis,
+            skewness=time_features.skewness,
+            crest_factor=time_features.crest_factor,
+            shape_factor=time_features.shape_factor,
+            power_low=power_low,
+            power_mid=power_mid,
+            power_high=power_high
+        )
+
         analysis_result = AnalysisResult(
-            features=time_features, # This needs to be the full features object, which means updating the time_features to include power.
+            features=evaluation_features,
             quality=quality,
             config=analysis_config,
             timestamp=current_timestamp,
@@ -429,10 +428,6 @@ if uploaded_file is not None and 'fs_hz' in locals(): # Ensure analysis has run
             fs_hz=fs_hz,
             app_version="1.0.0"
         )
-        # Update features in analysis_result to include power_low, power_mid, power_high
-        analysis_result.features.power_low = power_low
-        analysis_result.features.power_mid = power_mid
-        analysis_result.features.power_high = power_high
 
         audit_log_data = asdict(analysis_result)
         audit_log_json = json.dumps(audit_log_data, indent=2, ensure_ascii=False)
@@ -451,4 +446,3 @@ if uploaded_file is not None and 'fs_hz' in locals(): # Ensure analysis has run
         st.info("解析が完了すると監査ログが利用可能になります。")
     except Exception as e:
         st.error(f"監査ログの生成中にエラーが発生しました: {e}")
-

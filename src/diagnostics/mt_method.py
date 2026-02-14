@@ -47,7 +47,7 @@ class MTSpace:
         except np.linalg.LinAlgError:
             # Add a small regularization term to the diagonal (Tikhonov regularization)
             # The magnitude of regularization (1e-6) can be tuned.
-            regularization_term = np.identity(covariance_matrix.shape[0]) * 1e-6
+            regularization_term = np.identity(covariance_matrix.shape[0]) * 1e-9 # Changed from 1e-6 to 1e-9
             self.inverse_covariance_matrix = np.linalg.inv(covariance_matrix + regularization_term)
 
         self.is_provisional = len(self.normal_samples_vectors) < self.recommended_samples
