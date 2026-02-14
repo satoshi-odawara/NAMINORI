@@ -1,6 +1,6 @@
 import streamlit as st
 import numpy as np
-from src.core.models import SignalQuantity, AnalysisConfig, WindowFunction, VibrationFeatures, QualityMetrics
+from src.core.models import SignalQuantity, AnalysisConfig, WindowFunction, VibrationFeatures, QualityMetrics, NoiseReductionFilterType
 from src.core.feature_extraction import calculate_time_domain_features, calculate_fft_features
 from src.core.quality_check import calculate_quality_metrics, get_confidence_score
 from src.diagnostics.mt_method import MTSpace
@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 from scipy.signal import find_peaks
 import json
 from dataclasses import asdict
-from src.core.signal_processing import load_wav_file, remove_dc_offset, apply_butterworth_filter
+from src.core.signal_processing import load_wav_file, remove_dc_offset, apply_butterworth_filter, apply_noise_reduction_filter
 
 st.set_page_config(layout="wide", page_title="振動解析Webアプリ")
 
@@ -25,6 +25,11 @@ def get_serializable_audit_log(result: AnalysisResult) -> dict:
     log_data = asdict(result)
     log_data['config']['quantity'] = result.config.quantity.value
     log_data['config']['window'] = result.config.window.value
+    log_data['config']['noise_reduction_type'] = result.config.noise_reduction_type.value # Add this
+    if result.config.notch_freq_hz:
+        log_data['config']['notch_freq_hz'] = result.config.notch_freq_hz
+    if result.config.notch_q_factor:
+        log_data['config']['notch_q_factor'] = result.config.notch_q_factor
     return log_data
 
 # --- Sidebar ---
@@ -34,11 +39,18 @@ with st.sidebar.expander("正常データで単位空間を構築"):
     train_hpf = st.number_input("HPF (訓練用)", 0, 22050, 10, key="train_hpf")
     train_lpf = st.number_input("LPF (訓練用)", 0, 22050, 20000, key="train_lpf")
     train_order = st.number_input("フィルタ次数 (訓練用)", 1, 10, 4, key="train_order")
+    # Noise Reduction Filter settings for training - using defaults or user input, but for simplicity, let's keep it None for training for now
+    # Or, we should expose these to the UI as well for full control
+    train_nr_type = NoiseReductionFilterType.NONE # Default to none for training for now
+    train_nr_freq = None
+    train_nr_q = None
+
 
     if st.button("単位空間を構築/更新", key="build_mt_space"):
         if normal_files:
             st.session_state.mt_space = MTSpace()
-            for file in normal_files:
+            for i, file in enumerate(normal_files):
+                st.info(f"処理中: {file.name} ({i+1}/{len(normal_files)})") # Using st.info for progress as st.text was not showing
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_f:
                     tmp_f.write(file.getvalue())
                     fs, data, _ = load_wav_file(tmp_f.name)
@@ -46,6 +58,14 @@ with st.sidebar.expander("正常データで単位空間を構築"):
                 
                 processed = remove_dc_offset(data)
                 processed = apply_butterworth_filter(processed, fs, float(train_hpf) if train_hpf > 0 else None, float(train_lpf) if train_lpf > 0 else None, train_order)
+                # Apply noise reduction filter to training data if configured
+                processed = apply_noise_reduction_filter(
+                    processed,
+                    fs,
+                    train_nr_type,
+                    train_nr_freq,
+                    train_nr_q
+                )
                 
                 time_feats = calculate_time_domain_features(processed)
                 _, _, power_bands_dict = calculate_fft_features(processed, fs, WindowFunction.HANNING)
@@ -83,12 +103,29 @@ if uploaded_file:
         lpf = st.sidebar.number_input("LPF (Hz)", 0.0, nyquist, nyquist, key="eval_lpf")
         order = st.sidebar.number_input("フィルタ次数", 1, 10, 4, key="eval_order")
         
+        st.sidebar.header("ノイズ除去フィルタ設定")
+        nr_type = st.sidebar.selectbox("ノイズ除去タイプ", list(NoiseReductionFilterType), format_func=lambda x: x.value, key="nr_type")
+        nr_freq = None
+        nr_q = None
+
+        if nr_type == NoiseReductionFilterType.NOTCH:
+            nr_freq = st.sidebar.number_input("ノッチ周波数 (Hz)", 0.0, nyquist, 60.0, key="nr_freq")
+            nr_q = st.sidebar.number_input("ノッチQ値", 0.1, 100.0, 30.0, key="nr_q")
+
         st.sidebar.header("FFTピーク設定")
         top_n_peaks = st.sidebar.slider("ピーク表示数", 1, 20, 5, key="peak_count")
         min_peak_height_percent = st.sidebar.slider("最小ピーク高さ（最大値に対する%）", 0, 100, 10, key="peak_height")
         peak_distance_hz = st.sidebar.slider("ピーク最小距離（Hz）", 1, 100, 10, key="peak_distance")
 
-        config = AnalysisConfig(quantity, window, float(hpf) if hpf > 0 else None, float(lpf) if lpf < nyquist else None, order)
+        config = AnalysisConfig(
+            quantity, window,
+            float(hpf) if hpf > 0 else None,
+            float(lpf) if lpf < nyquist else None,
+            order,
+            noise_reduction_type=nr_type,
+            notch_freq_hz=float(nr_freq) if nr_freq else None,
+            notch_q_factor=float(nr_q) if nr_q else None
+        )
 
         with st.container():
             st.subheader("適用中の解析設定")
@@ -97,17 +134,39 @@ if uploaded_file:
                 st.metric("物理量", config.quantity.value)
             with col2:
                 st.markdown(f"""
-                **フィルタ設定:**
+                **標準フィルタ設定:**
                 - HPF: `{config.highpass_hz or 'N/A'}`
                 - LPF: `{config.lowpass_hz or 'N/A'}`
                 - Order: `{config.filter_order}`
                 """)
             with col3:
                 st.metric("窓関数", config.window.value)
+            
+            # ノイズ除去フィルタの表示
+            if config.noise_reduction_type != NoiseReductionFilterType.NONE:
+                st.markdown(f"""
+                **ノイズ除去フィルタ:** `{config.noise_reduction_type.value}`
+                - 周波数: `{config.notch_freq_hz or 'N/A'} Hz`
+                - Q値: `{config.notch_q_factor or 'N/A'}`
+                """)
         st.write("---")
 
         processed = remove_dc_offset(data_raw)
-        processed = apply_butterworth_filter(processed, fs_hz, config.highpass_hz, config.lowpass_hz, config.filter_order)
+        processed = apply_butterworth_filter(
+            processed,
+            fs_hz,
+            config.highpass_hz,
+            config.lowpass_hz,
+            config.filter_order
+        )
+        # Apply noise reduction filter
+        processed = apply_noise_reduction_filter(
+            processed,
+            fs_hz,
+            config.noise_reduction_type,
+            config.notch_freq_hz,
+            config.notch_q_factor
+        )
         
         time_features = calculate_time_domain_features(processed)
         freqs, mags, power_bands = calculate_fft_features(processed, fs_hz, config.window)

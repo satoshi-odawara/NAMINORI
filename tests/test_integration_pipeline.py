@@ -6,8 +6,8 @@ import hashlib
 from datetime import datetime
 import json
 
-from src.core.models import SignalQuantity, AnalysisConfig, WindowFunction, VibrationFeatures, TimeDomainFeatures
-from src.core.signal_processing import load_wav_file, remove_dc_offset, apply_butterworth_filter
+from src.core.models import SignalQuantity, AnalysisConfig, WindowFunction, VibrationFeatures, TimeDomainFeatures, NoiseReductionFilterType
+from src.core.signal_processing import load_wav_file, remove_dc_offset, apply_butterworth_filter, apply_noise_reduction_filter
 from src.core.feature_extraction import calculate_time_domain_features, calculate_fft_features
 from src.core.quality_check import calculate_quality_metrics, get_confidence_score
 from src.diagnostics.mt_method import MTSpace
@@ -21,7 +21,7 @@ def dummy_sine_wav(tmp_path):
     duration = 1.0
     frequency = 100.0
     t = np.linspace(0., duration, int(fs * duration), endpoint=False)
-    amplitude = np.iinfo(np.int16).max * 0.5
+    amplitude = np.iinfo(np.int16).max * 0.5  # Half of max amplitude for int16
     data_int16 = (amplitude * np.sin(2. * np.pi * frequency * t)).astype(np.int16)
 
     file_path = tmp_path / "sine_wave.wav"
@@ -64,6 +64,27 @@ def normal_wav_files_for_mt(tmp_path, dummy_sine_wav):
         files.append(file_path)
     return files, fs
 
+# Fixture to create a WAV file with a specific noise frequency (e.g., 60 Hz hum)
+@pytest.fixture
+def sine_with_60hz_noise_wav(tmp_path):
+    fs = 44100
+    duration = 2.0
+    t = np.linspace(0., duration, int(fs * duration), endpoint=False)
+    
+    # Main signal at 100 Hz
+    main_signal = 0.5 * np.sin(2 * np.pi * 100 * t)
+    # Strong 60 Hz noise
+    noise_60hz = 0.3 * np.sin(2 * np.pi * 60 * t)
+    # Some broadband noise
+    broadband_noise = np.random.normal(0, 0.05, len(t))
+
+    data = main_signal + noise_60hz + broadband_noise
+    data_int16 = (data / np.max(np.abs(data)) * (np.iinfo(np.int16).max * 0.5)).astype(np.int16)
+
+    file_path = tmp_path / "sine_with_60hz_noise.wav"
+    wavfile.write(file_path, fs, data_int16)
+    return file_path, fs, 60.0 # Return file path, fs, and noise frequency
+
 def test_full_analysis_pipeline_integration(dummy_sine_wav, tmp_path):
     file_path, fs_expected, _ = dummy_sine_wav
 
@@ -73,13 +94,14 @@ def test_full_analysis_pipeline_integration(dummy_sine_wav, tmp_path):
     assert data_normalized is not None
     assert file_hash is not None
 
-    # Define Analysis Config
+    # Define Analysis Config (without noise reduction for this test)
     analysis_config = AnalysisConfig(
         quantity=SignalQuantity.ACCEL,
         window=WindowFunction.HANNING,
         highpass_hz=50,
         lowpass_hz=200,
-        filter_order=4
+        filter_order=4,
+        noise_reduction_type=NoiseReductionFilterType.NONE # Explicitly none
     )
 
     # 2. Apply Signal Processing
@@ -87,6 +109,7 @@ def test_full_analysis_pipeline_integration(dummy_sine_wav, tmp_path):
     data_filtered = apply_butterworth_filter(
         data_ac, fs_hz, analysis_config.highpass_hz, analysis_config.lowpass_hz, analysis_config.filter_order
     )
+    # No noise reduction filter applied in this particular test
     assert np.mean(data_filtered) < 1e-9
 
     # 3. Extract Features
@@ -94,7 +117,7 @@ def test_full_analysis_pipeline_integration(dummy_sine_wav, tmp_path):
     assert time_features.rms > 0
     assert time_features.peak > 0
 
-    freq_hz, magnitude, power_bands_dict = calculate_fft_features( # Renamed to power_bands_dict
+    freq_hz, magnitude, power_bands_dict = calculate_fft_features(
         data_filtered, fs_hz, analysis_config.window
     )
     assert len(freq_hz) > 0
@@ -116,9 +139,9 @@ def test_full_analysis_pipeline_integration(dummy_sine_wav, tmp_path):
     # 5. Construct AnalysisResult for audit log
     vibration_features = VibrationFeatures(
         **time_features.__dict__,
-        power_low=power_bands_dict['low'], # Use power_bands_dict
-        power_mid=power_bands_dict['mid'], # Use power_bands_dict
-        power_high=power_bands_dict['high'] # Use power_bands_dict
+        power_low=power_bands_dict['low'],
+        power_mid=power_bands_dict['mid'],
+        power_high=power_bands_dict['high']
     )
     analysis_result = AnalysisResult(
         features=vibration_features,
@@ -149,7 +172,8 @@ def test_mt_pipeline_integration(normal_wav_files_for_mt, dummy_sine_wav, dummy_
         window=WindowFunction.HANNING,
         highpass_hz=50,
         lowpass_hz=200,
-        filter_order=4
+        filter_order=4,
+        noise_reduction_type=NoiseReductionFilterType.NONE # Explicitly none
     )
 
     # 1. Train MT Space
@@ -160,14 +184,14 @@ def test_mt_pipeline_integration(normal_wav_files_for_mt, dummy_sine_wav, dummy_
             data_ac, fs_hz, mt_train_config.highpass_hz, mt_train_config.lowpass_hz, mt_train_config.filter_order
         )
         time_features = calculate_time_domain_features(data_filtered)
-        _, _, power_bands_dict = calculate_fft_features( # Renamed to power_bands_dict
+        _, _, power_bands_dict = calculate_fft_features(
             data_filtered, fs_hz, mt_train_config.window
         )
         normal_features = VibrationFeatures(
             **time_features.__dict__,
-            power_low=power_bands_dict['low'], # Use power_bands_dict
-            power_mid=power_bands_dict['mid'], # Use power_bands_dict
-            power_high=power_bands_dict['high'] # Use power_bands_dict
+            power_low=power_bands_dict['low'],
+            power_mid=power_bands_dict['mid'],
+            power_high=power_bands_dict['high']
         )
         mt_space.add_normal_sample(normal_features)
 
@@ -183,14 +207,14 @@ def test_mt_pipeline_integration(normal_wav_files_for_mt, dummy_sine_wav, dummy_
         data_eval_ac, fs_eval_hz, mt_train_config.highpass_hz, mt_train_config.lowpass_hz, mt_train_config.filter_order
     )
     eval_time_features = calculate_time_domain_features(data_eval_filtered)
-    _, _, eval_power_bands_dict = calculate_fft_features( # Renamed to eval_power_bands_dict
+    _, _, eval_power_bands_dict = calculate_fft_features(
         data_eval_filtered, fs_eval_hz, mt_train_config.window
     )
     normal_eval_features = VibrationFeatures(
         **eval_time_features.__dict__,
-        power_low=eval_power_bands_dict['low'], # Use eval_power_bands_dict
-        power_mid=eval_power_bands_dict['mid'], # Use eval_power_bands_dict
-        power_high=eval_power_bands_dict['high'] # Use eval_power_bands_dict
+        power_low=eval_power_bands_dict['low'],
+        power_mid=eval_power_bands_dict['mid'],
+        power_high=eval_power_bands_dict['high']
     )
     md_normal = mt_space.calculate_md(normal_eval_features)
     assert md_normal < 3.0
@@ -203,14 +227,14 @@ def test_mt_pipeline_integration(normal_wav_files_for_mt, dummy_sine_wav, dummy_
         data_anomalous_ac, fs_anomalous_hz, mt_train_config.highpass_hz, mt_train_config.lowpass_hz, mt_train_config.filter_order
     )
     anomalous_time_features = calculate_time_domain_features(data_anomalous_filtered)
-    _, _, anomalous_power_bands_dict = calculate_fft_features( # Renamed to anomalous_power_bands_dict
+    _, _, anomalous_power_bands_dict = calculate_fft_features(
         data_anomalous_filtered, fs_anomalous_hz, mt_train_config.window
     )
     anomalous_eval_features = VibrationFeatures(
         **anomalous_time_features.__dict__,
-        power_low=anomalous_power_bands_dict['low'], # Use anomalous_power_bands_dict
-        power_mid=anomalous_power_bands_dict['mid'], # Use anomalous_power_bands_dict
-        power_high=anomalous_power_bands_dict['high'] # Use anomalous_power_bands_dict
+        power_low=anomalous_power_bands_dict['low'],
+        power_mid=anomalous_power_bands_dict['mid'],
+        power_high=anomalous_power_bands_dict['high']
     )
     md_anomalous = mt_space.calculate_md(anomalous_eval_features)
     assert md_anomalous > 5.0
@@ -241,7 +265,8 @@ def test_analysis_config_consistency(tmp_path):
         window=WindowFunction.HANNING,
         highpass_hz=200,
         lowpass_hz=2000,
-        filter_order=8
+        filter_order=8,
+        noise_reduction_type=NoiseReductionFilterType.NONE # Explicitly none
     )
 
     fs_hz, data_normalized, _ = load_wav_file(str(test_file_path))
@@ -282,3 +307,58 @@ def test_vibration_features_instantiation_with_power_bands():
     assert vf.power_low == 0.2
     assert vf.power_mid == 0.7
     assert vf.power_high == 0.1
+
+# New integration test for noise reduction filter
+def test_noise_reduction_pipeline_integration(sine_with_60hz_noise_wav, tmp_path):
+    file_path, fs_expected, noise_freq = sine_with_60hz_noise_wav
+    
+    # 1. Load WAV file
+    fs_hz, data_normalized, file_hash = load_wav_file(str(file_path))
+    assert fs_hz == fs_expected
+
+    # Define Analysis Config with Notch filter for 60 Hz noise
+    analysis_config = AnalysisConfig(
+        quantity=SignalQuantity.ACCEL,
+        window=WindowFunction.HANNING,
+        highpass_hz=None, # No Butterworth filter for simplicity in this test
+        lowpass_hz=None,
+        filter_order=4,
+        noise_reduction_type=NoiseReductionFilterType.NOTCH,
+        notch_freq_hz=noise_freq,
+        notch_q_factor=30.0 # Relatively narrow Q factor
+    )
+
+    # 2. Apply Signal Processing
+    data_ac = remove_dc_offset(data_normalized)
+    data_butter_filtered = apply_butterworth_filter(
+        data_ac, fs_hz, analysis_config.highpass_hz, analysis_config.lowpass_hz, analysis_config.filter_order
+    )
+    data_nr_filtered = apply_noise_reduction_filter(
+        data_butter_filtered,
+        fs_hz,
+        analysis_config.noise_reduction_type,
+        analysis_config.notch_freq_hz,
+        analysis_config.notch_q_factor
+    )
+
+    # 3. Extract Features and check noise reduction effect
+    freq_hz_orig, magnitude_orig, _ = calculate_fft_features(data_butter_filtered, fs_hz, analysis_config.window)
+    freq_hz_nr, magnitude_nr, _ = calculate_fft_features(data_nr_filtered, fs_hz, analysis_config.window)
+
+    # Find the magnitude at the noise frequency before and after filtering
+    idx_noise_orig = np.argmin(np.abs(freq_hz_orig - noise_freq))
+    idx_noise_nr = np.argmin(np.abs(freq_hz_nr - noise_freq))
+    
+    # Check that noise magnitude is significantly reduced after NR filter
+    # Allow some tolerance for side effects of filtering
+    assert magnitude_nr[idx_noise_nr] < 0.5 * magnitude_orig[idx_noise_orig] # Noise should be at least 50% reduced
+
+    # Ensure main signal is still present (e.g., peak at 100 Hz)
+    main_freq_val = 100.0
+    idx_main_orig = np.argmin(np.abs(freq_hz_orig - main_freq_val))
+    idx_main_nr = np.argmin(np.abs(freq_hz_nr - main_freq_val))
+
+    np.testing.assert_allclose(magnitude_nr[idx_main_nr], magnitude_orig[idx_main_orig], rtol=0.2) # Main signal should be largely preserved (within 20% tolerance)
+
+    # Optional: Test overall S/N ratio improvement
+    # This might require more sophisticated calculation, but for now, rely on magnitude reduction.

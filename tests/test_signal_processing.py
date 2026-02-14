@@ -3,8 +3,10 @@ import numpy as np
 from scipy.io import wavfile
 import os
 import hashlib
+from scipy import signal # Added for synthetic signal generation
 
 from src.core import signal_processing
+from src.core.models import NoiseReductionFilterType # Added for filter type
 
 # Helper function to create a dummy WAV file for testing
 @pytest.fixture
@@ -20,6 +22,28 @@ def dummy_wav_file(tmp_path):
     test_file_path = tmp_path / "test_audio.wav"
     wavfile.write(test_file_path, fs, data_int16)
     return test_file_path, fs, data_int16
+
+# New fixture for generating a sine wave with optional noise for filter tests
+@pytest.fixture
+def sine_with_noise_signal():
+    fs = 1000 # Hz
+    duration = 5.0 # seconds
+    t = np.linspace(0., duration, int(fs * duration), endpoint=False)
+    
+    # Main signal at 100 Hz
+    main_freq = 100
+    main_signal = 1.0 * np.sin(2 * np.pi * main_freq * t)
+    
+    # Noise components: 50 Hz (low), 60 Hz (notch target), 200 Hz (high)
+    noise_50hz = 0.2 * np.sin(2 * np.pi * 50 * t)
+    noise_60hz = 0.5 * np.sin(2 * np.pi * 60 * t) # Target for notch filter
+    noise_200hz = 0.3 * np.sin(2 * np.pi * 200 * t)
+
+    data = main_signal + noise_50hz + noise_60hz + noise_200hz
+    data_normalized = data / np.max(np.abs(data)) # Normalize to -1 to 1 range
+
+    return data_normalized, fs, main_freq, 50, 60, 200 # data, fs, main_freq, low_noise_freq, notch_freq, high_noise_freq
+
 
 def test_load_wav_file(dummy_wav_file):
     file_path, expected_fs, expected_data_int16 = dummy_wav_file
@@ -119,3 +143,78 @@ def test_apply_butterworth_filter_bpf():
     # Check no filter applied
     no_filter_data = signal_processing.apply_butterworth_filter(data, fs)
     np.testing.assert_allclose(no_filter_data, data)
+
+
+# --- Tests for Noise Reduction Filters ---
+def test_apply_noise_reduction_filter_none(sine_with_noise_signal):
+    data, fs, *_ = sine_with_noise_signal
+    filtered_data = signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.NONE)
+    np.testing.assert_allclose(filtered_data, data)
+
+def test_apply_noise_reduction_filter_notch(sine_with_noise_signal):
+    data, fs, main_freq, low_noise_freq, notch_freq, high_noise_freq = sine_with_noise_signal
+    
+    # Check FFT before filter
+    # fft_orig = np.fft.fft(data)
+    # freqs_orig = np.fft.fftfreq(len(data), d=1/fs)
+    # idx_notch_orig = np.argmin(np.abs(freqs_orig - notch_freq))
+    # orig_notch_magnitude = np.abs(fft_orig[idx_notch_orig])
+
+    # Apply notch filter at 60 Hz
+    q_factor = 30.0 # Relatively narrow band
+    filtered_data = signal_processing.apply_noise_reduction_filter(
+        data, fs, NoiseReductionFilterType.NOTCH, notch_freq_hz=notch_freq, notch_q_factor=q_factor
+    )
+
+    # Check FFT after filter
+    fft_filtered = np.fft.fft(filtered_data)
+    freqs_filtered = np.fft.fftfreq(len(filtered_data), d=1/fs)
+    
+    # Find indices for notch frequency and main signal frequency
+    idx_notch = np.argmin(np.abs(freqs_filtered - notch_freq))
+    idx_main = np.argmin(np.abs(freqs_filtered - main_freq))
+    
+    # The magnitude at notch frequency should be significantly reduced
+    # Compare with a baseline (e.g., magnitude of main signal)
+    # A simple threshold check
+    assert np.abs(fft_filtered[idx_notch]) < 0.1 * np.abs(fft_filtered[idx_main]) # Notch magnitude should be small fraction of main signal
+
+    # Check that main signal and other noise frequencies are largely preserved
+    idx_low_noise = np.argmin(np.abs(freqs_filtered - low_noise_freq))
+    idx_high_noise = np.argmin(np.abs(freqs_filtered - high_noise_freq))
+    
+    # These should not be attenuated as much as the notch frequency
+    assert np.abs(fft_filtered[idx_main]) > 0.5 # Main signal should be strong
+    assert np.abs(fft_filtered[idx_low_noise]) > 0.05 # Low noise should remain somewhat
+    assert np.abs(fft_filtered[idx_high_noise]) > 0.05 # High noise should remain somewhat
+
+
+def test_apply_noise_reduction_filter_notch_invalid_params(sine_with_noise_signal):
+    data, fs, *_ = sine_with_noise_signal
+    nyquist = fs / 2
+
+    # Missing notch_freq_hz
+    with pytest.raises(ValueError, match="notch_freq_hz and notch_q_factor are required for NOTCH filter."):
+        signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.NOTCH, notch_q_factor=30.0)
+
+    # Missing notch_q_factor
+    with pytest.raises(ValueError, match="notch_freq_hz and notch_q_factor are required for NOTCH filter."):
+        signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.NOTCH, notch_freq_hz=60.0)
+    
+    # notch_freq_hz out of range (<=0)
+    with pytest.raises(ValueError, match=rf"Notch frequency \(([-]?\d+\.\d+) Hz\) must be between 0 and Nyquist frequency \((\d+\.\d+) Hz\)\."):
+        signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.NOTCH, notch_freq_hz=0.0, notch_q_factor=30.0)
+    with pytest.raises(ValueError, match=rf"Notch frequency \(([-]?\d+\.\d+) Hz\) must be between 0 and Nyquist frequency \((\d+\.\d+) Hz\)\."):
+        signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.NOTCH, notch_freq_hz=-10.0, notch_q_factor=30.0)
+    
+    # notch_freq_hz out of range (>= nyquist)
+    with pytest.raises(ValueError, match=rf"Notch frequency \((\d+\.\d+) Hz\) must be between 0 and Nyquist frequency \((\d+\.\d+) Hz\)\."):
+        signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.NOTCH, notch_freq_hz=nyquist, notch_q_factor=30.0)
+    with pytest.raises(ValueError, match=rf"Notch frequency \((\d+\.\d+) Hz\) must be between 0 and Nyquist frequency \((\d+\.\d+) Hz\)\."):
+        signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.NOTCH, notch_freq_hz=nyquist + 10, notch_q_factor=30.0)
+
+    # notch_q_factor invalid (<=0)
+    with pytest.raises(ValueError, match="Notch Q-factor must be positive."):
+        signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.NOTCH, notch_freq_hz=60.0, notch_q_factor=0.0)
+    with pytest.raises(ValueError, match="Notch Q-factor must be positive."):
+        signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.NOTCH, notch_freq_hz=60.0, notch_q_factor=-1.0)

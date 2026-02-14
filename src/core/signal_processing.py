@@ -3,6 +3,7 @@ from scipy.io import wavfile
 from scipy import signal
 import hashlib
 from typing import Tuple, Optional
+from src.core.models import NoiseReductionFilterType # Added import
 
 def load_wav_file(file_path: str) -> Tuple[int, np.ndarray, str]:
     """
@@ -101,3 +102,49 @@ def apply_butterworth_filter(
 
     sos = signal.butter(order, freq_cutoff, btype=btype, fs=fs_hz, output='sos')
     return signal.sosfilt(sos, data)
+
+
+def apply_noise_reduction_filter(
+    data: np.ndarray,
+    fs_hz: int,
+    filter_type: NoiseReductionFilterType,
+    notch_freq_hz: Optional[float] = None,
+    notch_q_factor: Optional[float] = None
+) -> np.ndarray:
+    """
+    Applies a noise reduction filter to the signal based on the specified type.
+
+    Args:
+        data: Input signal (NumPy array).
+        fs_hz: Sampling frequency in Hz.
+        filter_type: Type of noise reduction filter to apply.
+        notch_freq_hz: Center frequency for the notch filter (Hz). Required if filter_type is NOTCH.
+        notch_q_factor: Q-factor for the notch filter. Required if filter_type is NOTCH.
+
+    Returns:
+        np.ndarray: Filtered signal.
+
+    Raises:
+        ValueError: If required parameters for a specific filter type are missing or invalid.
+    """
+    if filter_type == NoiseReductionFilterType.NONE:
+        return data
+
+    elif filter_type == NoiseReductionFilterType.NOTCH:
+        if notch_freq_hz is None or notch_q_factor is None:
+            raise ValueError("notch_freq_hz and notch_q_factor are required for NOTCH filter.")
+        
+        nyquist = 0.5 * fs_hz
+        if not (0 < notch_freq_hz < nyquist):
+            raise ValueError(f"Notch frequency ({notch_freq_hz} Hz) must be between 0 and Nyquist frequency ({nyquist} Hz).")
+        if notch_q_factor <= 0:
+            raise ValueError("Notch Q-factor must be positive.")
+
+        # Design notch filter
+        b, a = signal.iirnotch(notch_freq_hz, notch_q_factor, fs_hz)
+        # Apply filter forward and backward to avoid phase distortion
+        filtered_data = signal.filtfilt(b, a, data)
+        return filtered_data
+    
+    else:
+        raise ValueError(f"Unsupported noise reduction filter type: {filter_type}")

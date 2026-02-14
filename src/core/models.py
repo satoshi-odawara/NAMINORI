@@ -23,6 +23,11 @@ class WindowFunction(Enum):
     HANNING = "hanning"
     FLATTOP = "flattop"
 
+class NoiseReductionFilterType(Enum):
+    NONE = "none"
+    NOTCH = "notch" # ノッチフィルタ (特定の周波数を除去)
+    # 将来的に他のノイズ除去フィルタを追加可能
+
 @dataclass
 class AnalysisConfig:
     """解析条件（再現性保証用）"""
@@ -31,6 +36,11 @@ class AnalysisConfig:
     highpass_hz: Optional[float] = None
     lowpass_hz: Optional[float] = None
     filter_order: int = 4
+    
+    # ノイズ除去フィルタ設定
+    noise_reduction_type: NoiseReductionFilterType = NoiseReductionFilterType.NONE
+    notch_freq_hz: Optional[float] = None # ノッチフィルタの中心周波数
+    notch_q_factor: Optional[float] = None # ノッチフィルタのQ値 (帯域幅の逆数)
 
 @dataclass
 class QualityMetrics:

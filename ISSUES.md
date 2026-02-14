@@ -14,6 +14,6 @@
 - [x] ISSUE-012: Streamlit UI - 物理量種別と単位のUI表示統一 [CLOSED]
 - [x] ISSUE-013: Streamlit UI - フィルタ条件・窓関数・解析範囲の常時可視化を徹底 [CLOSED]
 - [x] ISSUE-014: Streamlit UI - FFTピーク自動アノテーション機能の改善・強化 [CLOSED]
-- [ ] ISSUE-015: Noise Reduction Filter - Backend Implementation [OPEN]
-- [ ] ISSUE-016: Noise Reduction Filter - Streamlit UI Integration [OPEN]
+- [x] ISSUE-015: Noise Reduction Filter - Backend Implementation [CLOSED]
+- [x] ISSUE-016: Noise Reduction Filter - Streamlit UI Integration [CLOSED]
 - [ ] ISSUE-017: Noise Reduction Filter - Unit and Integration Tests [OPEN]
