@@ -20,7 +20,7 @@
 - [x] ISSUE-018: Multi-Algorithm Noise Reduction - Model & Backend Extension [CLOSED]
 - [x] ISSUE-019: Multi-Algorithm Noise Reduction - Streamlit UI Enhancement [CLOSED]
 - [x] ISSUE-020: Multi-Algorithm Noise Reduction - Comprehensive Testing [CLOSED]
-- [ ] ISSUE-021: [Architect] Design Pluggable Noise Reduction Framework [OPEN]
+- [x] ISSUE-021: [Architect] Design Pluggable Noise Reduction Framework [CLOSED]
 - [ ] ISSUE-022: [Developer] Implement Pluggable Noise Reduction Backend [OPEN]
 - [ ] ISSUE-023: [Developer] Update Streamlit UI for Dynamic Plugins [OPEN]
 - [ ] ISSUE-024: [Architect] Design Noise Reduction Evaluation Metrics [OPEN]
