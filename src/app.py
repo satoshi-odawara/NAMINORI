@@ -127,6 +127,15 @@ if uploaded_file:
                         help=param.help_text,
                         key=f"nr_{plugin_conf_name}_{param.name}"
                     )
+                elif param.param_type == "slider":
+                    plugin_params[param.name] = st.sidebar.slider(
+                        label=param.label,
+                        min_value=param.min_value,
+                        max_value=param.max_value,
+                        value=param.default,
+                        help=param.help_text,
+                        key=f"nr_{plugin_conf_name}_{param.name}"
+                    )
         
         st.sidebar.header("FFTピーク設定")
         top_n_peaks = st.sidebar.slider("ピーク表示数", 1, 20, 5, key="peak_count")
