@@ -16,4 +16,7 @@
 - [x] ISSUE-014: Streamlit UI - FFTピーク自動アノテーション機能の改善・強化 [CLOSED]
 - [x] ISSUE-015: Noise Reduction Filter - Backend Implementation [CLOSED]
 - [x] ISSUE-016: Noise Reduction Filter - Streamlit UI Integration [CLOSED]
-- [ ] ISSUE-017: Noise Reduction Filter - Unit and Integration Tests [OPEN]
+- [x] ISSUE-017: Noise Reduction Filter - Unit and Integration Tests [CLOSED]
+- [ ] ISSUE-018: Multi-Algorithm Noise Reduction - Model & Backend Extension [OPEN]
+- [ ] ISSUE-019: Multi-Algorithm Noise Reduction - Streamlit UI Enhancement [OPEN]
+- [ ] ISSUE-020: Multi-Algorithm Noise Reduction - Comprehensive Testing [OPEN]
