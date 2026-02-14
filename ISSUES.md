@@ -1,0 +1,16 @@
+# Project Issues
+
+- [ ] ISSUE-001: Streamlit UI - KPIの横並び表示を実装 [OPEN]
+- [ ] ISSUE-002: Streamlit UI - 診断信頼度に基づいた色分けインジケータの実装 (赤・黄・緑) [OPEN]
+- [ ] ISSUE-003: Streamlit UI - MT法のための正常WAVファイルアップロード機能と単位空間構築UIの実装 [OPEN]
+- [ ] ISSUE-004: Streamlit UI - 解析されたデータに対するマハラノビス距離と異常ステータスの表示 [OPEN]
+- [ ] ISSUE-005: Streamlit UI - 監査ログ（JSON）の画面表示およびダウンロード機能の実装 [OPEN]
+- [ ] ISSUE-006: Streamlit UI - Plotlyグラフのインタラクション強化 (ズーム、パン、スパイクノイズ確認) [OPEN]
+- [ ] ISSUE-007: Integration Test - WAVファイルアップロードから診断結果までのフルパイプラインテスト [OPEN]
+- [ ] ISSUE-008: Integration Test - UI設定とバックエンド処理の一貫性検証 [OPEN]
+- [ ] ISSUE-009: Regression Test - 機能追加・修正後の特徴量と診断結果の一貫性検証 [OPEN]
+- [ ] ISSUE-010: CI/CD Setup - GitHub Actionsによる自動テスト（pytest）とコード品質チェック（ruff check）の導入 [OPEN]
+- [ ] ISSUE-011: Documentation - 複雑なロジックに対するコード内コメントの追加・整備 [OPEN]
+- [ ] ISSUE-012: Streamlit UI - 物理量種別と単位のUI表示統一 [OPEN]
+- [ ] ISSUE-013: Streamlit UI - フィルタ条件・窓関数・解析範囲の常時可視化を徹底 [OPEN]
+- [ ] ISSUE-014: Streamlit UI - FFTピーク自動アノテーション機能の改善・強化 [OPEN]
