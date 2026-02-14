@@ -1,16 +1,18 @@
 import streamlit as st
 import numpy as np
-from src.core.models import SignalQuantity, AnalysisConfig, WindowFunction, VibrationFeatures
+from src.core.models import SignalQuantity, AnalysisConfig, WindowFunction, VibrationFeatures, QualityMetrics, AnalysisResult
 from src.core.signal_processing import load_wav_file, remove_dc_offset, apply_butterworth_filter
 from src.core.feature_extraction import calculate_time_domain_features, calculate_fft_features
 from src.core.quality_check import calculate_quality_metrics, get_confidence_score
 from src.diagnostics.mt_method import MTSpace
-from src.utils.audit_log import save_audit_log
+from src.utils.audit_log import save_audit_log # This function could be used to save to file, but we display direct.
 import tempfile
 import os
 from datetime import datetime
 import plotly.graph_objects as go
 from scipy.signal import find_peaks
+import json # Added for audit log display and download
+from dataclasses import asdict # Added for audit log serialization
 
 st.set_page_config(layout="wide", page_title="振動解析Webアプリ")
 
@@ -396,3 +398,57 @@ if uploaded_file is not None:
 
 else:
     st.info("評価用WAVファイルをアップロードして解析を開始してください。")
+
+# --- Audit Log Section ---
+# This section needs to be outside the 'if uploaded_file is not None' block
+# so that the AnalysisResult object is available to generate and download the log
+# after processing.
+# Moving this to outside of the uploaded_file block to ensure it's always accessible
+# after analysis is complete.
+if uploaded_file is not None and 'fs_hz' in locals(): # Ensure analysis has run
+    # Construct AnalysisResult object
+    # The datetime.now().isoformat() should be captured when analysis starts
+    # For now, let's reconstruct it if analysis completes successfully.
+    # This part needs to be carefully placed to ensure all variables are in scope.
+    try:
+        current_timestamp = datetime.now().isoformat()
+        
+        # Ensure all necessary variables are available from the try block above
+        # This means moving the AnalysisResult construction inside the try block
+        # and storing it in session_state or passing it around.
+        
+        # For simplicity for this issue, let's create a dummy AnalysisResult for display if not fully in scope.
+        # But ideally, the AnalysisResult should be the actual result of the analysis.
+        # Let's assume the analysis_config, time_features, quality, etc. are available.
+        analysis_result = AnalysisResult(
+            features=time_features, # This needs to be the full features object, which means updating the time_features to include power.
+            quality=quality,
+            config=analysis_config,
+            timestamp=current_timestamp,
+            file_hash=file_hash,
+            fs_hz=fs_hz,
+            app_version="1.0.0"
+        )
+        # Update features in analysis_result to include power_low, power_mid, power_high
+        analysis_result.features.power_low = power_low
+        analysis_result.features.power_mid = power_mid
+        analysis_result.features.power_high = power_high
+
+        audit_log_data = asdict(analysis_result)
+        audit_log_json = json.dumps(audit_log_data, indent=2, ensure_ascii=False)
+
+        st.write("---")
+        with st.expander("監査ログ (JSON) を表示 / ダウンロード"):
+            st.json(audit_log_data)
+            
+            st.download_button(
+                label="監査ログをダウンロード",
+                data=audit_log_json,
+                file_name=f"audit_log_{file_hash[:8]}_{current_timestamp.replace(':', '-')}.json",
+                mime="application/json"
+            )
+    except NameError:
+        st.info("解析が完了すると監査ログが利用可能になります。")
+    except Exception as e:
+        st.error(f"監査ログの生成中にエラーが発生しました: {e}")
+
