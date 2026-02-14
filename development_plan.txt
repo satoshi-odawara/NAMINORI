@@ -4,65 +4,45 @@ This document outlines the development plan for the vibration analysis web appli
 
 ---
 
-## Phase 1: Core Signal Processing & Feature Extraction (Backend Refactoring) - COMPLETED
+## Phase 1-4: Core Implementation & Testing - COMPLETED
+All initial development phases, including core backend refactoring, MT method implementation, Streamlit UI creation, and comprehensive testing, are complete. The project is in a stable state.
 
-**Objective:** Refactor the existing `analyze_vibration_full` function into modular, testable components as per the recommended project structure, ensuring all `GEMINI.md` signal processing rules are met.
+---
+
+## Phase 5: Pluggable Noise Reduction Framework
+
+**Objective:** Refactor the noise reduction logic to support custom, user-defined algorithms via a pluggable architecture, enhancing system extensibility.
 
 **Estimated Duration:** 2-3 weeks
 
 **Tasks:**
 
-1.  **Define Core Models (`src/core/models.py`):** COMPLETED
-2.  **Implement Signal Processing Core (`src/core/signal_processing.py`):** COMPLETED
-3.  **Implement Feature Extraction (`src/core/feature_extraction.py`):** COMPLETED
-4.  **Implement Data Quality Checks (`src/core/quality_check.py`):** COMPLETED
-5.  **Audit Log Management (`src/utils/audit_log.py`):** COMPLETED
-6.  **Comprehensive Unit Testing (`tests/test_*.py`):** COMPLETED
-7.  **Implement Noise Reduction Filters (Backend):** COMPLETED
-8.  **Implement Multiple Noise Reduction Algorithms (Backend):** COMPLETED
+1.  **[Architect] Design Pluggable Framework (`ISSUE-021`):** NOT STARTED
+2.  **[Developer] Implement Backend (`ISSUE-022`):** NOT STARTED
+3.  **[Developer] Update Streamlit UI (`ISSUE-023`):** NOT STARTED
+4.  **[Documentation] Create User Guide (`ISSUE-028`):** NOT STARTED
 
-## Phase 2: MT Method Implementation (Backend) - COMPLETED
+## Phase 6: Noise Reduction Evaluation Framework
 
-**Objective:** Develop the Mahalanobis-Taguchi (MT) method for anomaly detection, including unit space management.
+**Objective:** Implement a framework to objectively measure and visualize the effectiveness of any applied noise reduction filter, providing users with immediate, data-driven feedback.
 
-**Estimated Duration:** 1-2 weeks
+**Estimated Duration:** 2-3 weeks
 
 **Tasks:**
 
-1.  **MT Method Core (`src/diagnostics/mt_method.py`):** COMPLETED
-2.  **Integration with `VibrationFeatures`:** COMPLETED
-3.  **MT Method Testing (`tests/test_mt_method.py`):** COMPLETED
+1.  **[Architect] Design Evaluation Metrics (`ISSUE-024`):** NOT STARTED
+2.  **[Developer] Implement Evaluation Backend (`ISSUE-025`):** NOT STARTED
+3.  **[Developer] Implement Evaluation UI (`ISSUE-026`):** NOT STARTED
 
-## Phase 3: Streamlit Web Application (Frontend) - IN PROGRESS
+## Phase 7: Final Testing & Validation
 
-**Objective:** Build an interactive Streamlit UI that exposes the backend functionality according to the UI/UX guidelines in `GEMINI.md`.
+**Objective:** Ensure the quality, stability, and correctness of the new pluggable and evaluation frameworks.
 
-**Estimated Duration:** 3-4 weeks
-
-**Tasks:**
-
-1.  **Basic App Structure (`src/app.py`):** COMPLETED
-2.  **Analysis Configuration UI:** COMPLETED
-3.  **Visualization Integration (Plotly):** COMPLETED
-4.  **Results Display:** COMPLETED
-5.  **MT Method UI:** COMPLETED
-6.  **Audit Log UI:** COMPLETED
-7.  **Integrate Noise Reduction Filter UI:** COMPLETED
-8.  **Integrate Multi-Algorithm Noise Reduction UI:** COMPLETED
-
-## Phase 4: Testing, CI/CD & Documentation - IN PROGRESS
-
-**Objective:** Ensure application quality, maintainability, and reproducibility.
-
-**Estimated Duration:** 1-2 weeks
+**Estimated Duration:** 1 week
 
 **Tasks:**
 
-1.  **Integration Tests (`tests/test_integration.py` or similar):** COMPLETED
-2.  **Regression Tests:** COMPLETED
-3.  **CI/CD Setup (`.github/workflows/ci.yml`):** COMPLETED
-4.  **Project Documentation:** COMPLETED
-5.  **Add Comprehensive Tests for Multiple Noise Reduction Algorithms:** COMPLETED
+1.  **[QA/Expert] Add Comprehensive Tests (`ISSUE-027`):** NOT STARTED
 
 ---
 
@@ -70,6 +50,4 @@ This document outlines the development plan for the vibration analysis web appli
 
 *   **Adherence to `GEMINI.md`:** All implementations must strictly follow the conventions, physical validity principles and quality standards outlined in `GEMINI.md`.
 *   **Version Control:** Utilize Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`) for clear commit history.
-*   **Code Review:** Implement a code review process for all changes.
-*   **Performance Monitoring:** Keep performance targets (e.g., FFT < 2 seconds) in mind during development and optimize as needed.
 *   **Autonomous Operation:** Where specifications are ambiguous, make design decisions based on physical validity and leave comments/logs to explain the rationale.
