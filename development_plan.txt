@@ -20,7 +20,7 @@ All initial development phases, including core backend refactoring, MT method im
 1.  **[Architect] Design Pluggable Framework (`ISSUE-021`):** COMPLETED
 2.  **[Developer] Implement Backend (`ISSUE-022`):** COMPLETED
 3.  **[Developer] Update Streamlit UI (`ISSUE-023`):** COMPLETED
-4.  **[Documentation] Create User Guide (`ISSUE-028`):** NOT STARTED
+4.  **[Documentation] Create User Guide (`ISSUE-028`):** COMPLETED
 
 ## Phase 6: Noise Reduction Evaluation Framework
 

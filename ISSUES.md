@@ -27,4 +27,4 @@
 - [ ] ISSUE-025: [Developer] Implement Backend for Evaluation Framework [OPEN]
 - [ ] ISSUE-026: [Developer] Implement Evaluation UI in Streamlit [OPEN]
 - [ ] ISSUE-027: [QA/Expert] Add Comprehensive Tests for Plugin Framework [OPEN]
-- [ ] ISSUE-028: [Documentation] Create User Guide for Custom Plugins [OPEN]
+- [x] ISSUE-028: [Documentation] Create User Guide for Custom Plugins [CLOSED]
