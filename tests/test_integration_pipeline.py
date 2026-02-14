@@ -94,14 +94,14 @@ def test_full_analysis_pipeline_integration(dummy_sine_wav, tmp_path):
     assert time_features.rms > 0
     assert time_features.peak > 0
 
-    freq_hz, magnitude, power_bands = calculate_fft_features(
+    freq_hz, magnitude, power_bands_dict = calculate_fft_features( # Renamed to power_bands_dict
         data_filtered, fs_hz, analysis_config.window
     )
     assert len(freq_hz) > 0
     assert np.sum(magnitude) > 0
-    assert 0 <= power_bands['low'] <= 1
-    assert 0 <= power_bands['mid'] <= 1
-    assert 0 <= power_bands['high'] <= 1
+    assert 0 <= power_bands_dict['low'] <= 1
+    assert 0 <= power_bands_dict['mid'] <= 1
+    assert 0 <= power_bands_dict['high'] <= 1
 
     # 4. Calculate Quality Metrics
     rms_after_processing = np.sqrt(np.mean(data_filtered**2))
@@ -116,9 +116,9 @@ def test_full_analysis_pipeline_integration(dummy_sine_wav, tmp_path):
     # 5. Construct AnalysisResult for audit log
     vibration_features = VibrationFeatures(
         **time_features.__dict__,
-        power_low=power_bands['low'],
-        power_mid=power_bands['mid'],
-        power_high=power_bands['high']
+        power_low=power_bands_dict['low'], # Use power_bands_dict
+        power_mid=power_bands_dict['mid'], # Use power_bands_dict
+        power_high=power_bands_dict['high'] # Use power_bands_dict
     )
     analysis_result = AnalysisResult(
         features=vibration_features,
@@ -160,14 +160,14 @@ def test_mt_pipeline_integration(normal_wav_files_for_mt, dummy_sine_wav, dummy_
             data_ac, fs_hz, mt_train_config.highpass_hz, mt_train_config.lowpass_hz, mt_train_config.filter_order
         )
         time_features = calculate_time_domain_features(data_filtered)
-        _, _, power_bands = calculate_fft_features(
+        _, _, power_bands_dict = calculate_fft_features( # Renamed to power_bands_dict
             data_filtered, fs_hz, mt_train_config.window
         )
         normal_features = VibrationFeatures(
             **time_features.__dict__,
-            power_low=power_bands['low'],
-            power_mid=power_bands['mid'],
-            power_high=power_bands['high']
+            power_low=power_bands_dict['low'], # Use power_bands_dict
+            power_mid=power_bands_dict['mid'], # Use power_bands_dict
+            power_high=power_bands_dict['high'] # Use power_bands_dict
         )
         mt_space.add_normal_sample(normal_features)
 
@@ -183,14 +183,14 @@ def test_mt_pipeline_integration(normal_wav_files_for_mt, dummy_sine_wav, dummy_
         data_eval_ac, fs_eval_hz, mt_train_config.highpass_hz, mt_train_config.lowpass_hz, mt_train_config.filter_order
     )
     eval_time_features = calculate_time_domain_features(data_eval_filtered)
-    _, _, eval_power_bands = calculate_fft_features(
+    _, _, eval_power_bands_dict = calculate_fft_features( # Renamed to eval_power_bands_dict
         data_eval_filtered, fs_eval_hz, mt_train_config.window
     )
     normal_eval_features = VibrationFeatures(
         **eval_time_features.__dict__,
-        power_low=eval_power_bands['low'],
-        power_mid=eval_power_bands['mid'],
-        power_high=eval_power_bands['high']
+        power_low=eval_power_bands_dict['low'], # Use eval_power_bands_dict
+        power_mid=eval_power_bands_dict['mid'], # Use eval_power_bands_dict
+        power_high=eval_power_bands_dict['high'] # Use eval_power_bands_dict
     )
     md_normal = mt_space.calculate_md(normal_eval_features)
     assert md_normal < 3.0
@@ -203,14 +203,14 @@ def test_mt_pipeline_integration(normal_wav_files_for_mt, dummy_sine_wav, dummy_
         data_anomalous_ac, fs_anomalous_hz, mt_train_config.highpass_hz, mt_train_config.lowpass_hz, mt_train_config.filter_order
     )
     anomalous_time_features = calculate_time_domain_features(data_anomalous_filtered)
-    _, _, anomalous_power_bands = calculate_fft_features(
+    _, _, anomalous_power_bands_dict = calculate_fft_features( # Renamed to anomalous_power_bands_dict
         data_anomalous_filtered, fs_anomalous_hz, mt_train_config.window
     )
     anomalous_eval_features = VibrationFeatures(
         **anomalous_time_features.__dict__,
-        power_low=anomalous_power_bands['low'],
-        power_mid=anomalous_power_bands['mid'],
-        power_high=anomalous_power_bands['high']
+        power_low=anomalous_power_bands_dict['low'], # Use anomalous_power_bands_dict
+        power_mid=anomalous_power_bands_dict['mid'], # Use anomalous_power_bands_dict
+        power_high=anomalous_power_bands_dict['high'] # Use anomalous_power_bands_dict
     )
     md_anomalous = mt_space.calculate_md(anomalous_eval_features)
     assert md_anomalous > 5.0
@@ -250,13 +250,35 @@ def test_analysis_config_consistency(tmp_path):
         data_ac, fs_hz, analysis_config.highpass_hz, analysis_config.lowpass_hz, analysis_config.filter_order
     )
 
-    freqs, magnitudes, power_bands = calculate_fft_features(
+    freqs, magnitudes, power_bands_dict = calculate_fft_features( # Renamed to power_bands_dict
         data_filtered, fs_hz, analysis_config.window
     )
 
-    assert power_bands['low'] < 0.2
-    assert power_bands['mid'] > 0.7
-    assert power_bands['high'] < 0.1
+    assert power_bands_dict['low'] < 0.2
+    assert power_bands_dict['mid'] > 0.7
+    assert power_bands_dict['high'] < 0.1
 
     peak_idx = np.argmax(magnitudes)
     assert np.allclose(freqs[peak_idx], freq_mid, atol=50)
+
+# New test for `VibrationFeatures` instantiation
+def test_vibration_features_instantiation_with_power_bands():
+    dummy_time_features = TimeDomainFeatures(
+        rms=0.1, peak=0.5, kurtosis=3.0, skewness=0.0, crest_factor=5.0, shape_factor=1.2
+    )
+    dummy_power_bands = {'low': 0.2, 'mid': 0.7, 'high': 0.1}
+
+    # Ensure instantiation works correctly
+    vf = VibrationFeatures(
+        **dummy_time_features.__dict__,
+        power_low=dummy_power_bands['low'],
+        power_mid=dummy_power_bands['mid'],
+        power_high=dummy_power_bands['high']
+    )
+
+    assert vf.rms == 0.1
+    assert vf.peak == 0.5
+    assert vf.kurtosis == 3.0
+    assert vf.power_low == 0.2
+    assert vf.power_mid == 0.7
+    assert vf.power_high == 0.1

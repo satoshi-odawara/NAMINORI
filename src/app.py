@@ -48,9 +48,14 @@ with st.sidebar.expander("正常データで単位空間を構築"):
                 processed = apply_butterworth_filter(processed, fs, float(train_hpf) if train_hpf > 0 else None, float(train_lpf) if train_lpf > 0 else None, train_order)
                 
                 time_feats = calculate_time_domain_features(processed)
-                _, _, power_bands = calculate_fft_features(processed, fs, WindowFunction.HANNING)
+                _, _, power_bands_dict = calculate_fft_features(processed, fs, WindowFunction.HANNING)
                 
-                st.session_state.mt_space.add_normal_sample(VibrationFeatures(**asdict(time_feats), **power_bands))
+                st.session_state.mt_space.add_normal_sample(VibrationFeatures(
+                    **asdict(time_feats),
+                    power_low=power_bands_dict['low'],
+                    power_mid=power_bands_dict['mid'],
+                    power_high=power_bands_dict['high']
+                ))
             st.success(f"{len(normal_files)}個のファイルで単位空間を構築/更新しました。")
 
 st.sidebar.info(f"単位空間ステータス: {st.session_state.mt_space.get_status()}")
@@ -127,11 +132,15 @@ if uploaded_file:
             st.markdown(f'#### 診断信頼度: <span style="color:{color};">{confidence:.1f}%</span>', unsafe_allow_html=True)
             
             if st.session_state.mt_space.mean_vector is not None:
-                features = VibrationFeatures(**asdict(time_features), **power_bands)
+                features = VibrationFeatures(
+                    **asdict(time_features),
+                    power_low=power_bands['low'],
+                    power_mid=power_bands['mid'],
+                    power_high=power_bands['high']
+                )
                 md = st.session_state.mt_space.calculate_md(features)
                 md_color = "green" if md < 3.0 else "orange" if md < 5.0 else "red"
                 st.markdown(f'#### MT法診断 (MD): <span style="color:{md_color};">{md:.2f}</span>', unsafe_allow_html=True)
-
         with col2:
             st.subheader("時間波形")
             fig = go.Figure(go.Scatter(x=np.arange(len(processed))/fs_hz, y=processed))
@@ -155,8 +164,13 @@ if uploaded_file:
             st.plotly_chart(fig2, use_container_width=True)
             
         # --- Audit Log ---
-        features = VibrationFeatures(**asdict(time_features), **power_bands)
-        result = AnalysisResult(features, quality, config, datetime.now().isoformat(), file_hash, fs_hz)
+        features_for_audit = VibrationFeatures(
+            **asdict(time_features),
+            power_low=power_bands['low'],
+            power_mid=power_bands['mid'],
+            power_high=power_bands['high']
+        )
+        result = AnalysisResult(features_for_audit, quality, config, datetime.now().isoformat(), file_hash, fs_hz)
         with st.expander("監査ログ (JSON)"):
             log_data = get_serializable_audit_log(result)
             st.json(log_data)
