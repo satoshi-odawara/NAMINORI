@@ -5,7 +5,8 @@ from src.core.feature_extraction import calculate_time_domain_features, calculat
 from src.core.quality_check import calculate_quality_metrics, get_confidence_score
 from src.diagnostics.mt_method import MTSpace
 from src.utils.audit_log import AnalysisResult
-from src.core.plugins import plugin_manager # New import
+from src.core.plugins import plugin_manager
+from src.core.evaluation import NoiseReductionEvaluation
 import tempfile
 import os
 from datetime import datetime
@@ -39,6 +40,19 @@ def get_serializable_audit_log(result: AnalysisResult) -> dict:
         log_data['config']['noise_reduction_plugin_params'] = result.config.noise_reduction_plugin_params
 
     return log_data
+
+def perform_nr_evaluation(signal_pre_nr: np.ndarray, signal_post_nr: np.ndarray) -> NoiseReductionEvaluation:
+    """Calculates features before and after noise reduction for evaluation."""
+    features_before = calculate_time_domain_features(signal_pre_nr)
+    features_after = calculate_time_domain_features(signal_post_nr)
+    
+    return NoiseReductionEvaluation(
+        features_before=features_before,
+        features_after=features_after,
+        signal_pre_nr=signal_pre_nr,
+        signal_post_nr=signal_post_nr
+    )
+
 
 # --- Sidebar ---
 st.sidebar.header("MT法設定")
@@ -178,22 +192,28 @@ if uploaded_file:
         st.write("---")
 
         # Main processing chain
-        processed = remove_dc_offset(data_raw)
-        processed = apply_butterworth_filter(
-            processed,
+        processed_dc_removed = remove_dc_offset(data_raw)
+        signal_pre_nr = apply_butterworth_filter(
+            processed_dc_removed,
             fs_hz,
             config.highpass_hz,
             config.lowpass_hz,
             config.filter_order
         )
         
-        # Apply noise reduction plugin if selected
+        nr_eval_results = None
+        # Apply noise reduction plugin if selected and perform evaluation
         if selected_plugin and config.noise_reduction_plugin_params is not None:
-            processed = selected_plugin.process(
-                processed,
+            signal_post_nr = selected_plugin.process(
+                signal_pre_nr,
                 fs_hz,
                 **config.noise_reduction_plugin_params
             )
+            nr_eval_results = perform_nr_evaluation(signal_pre_nr, signal_post_nr)
+            processed = signal_post_nr
+        else:
+            processed = signal_pre_nr
+
         
         time_features = calculate_time_domain_features(processed)
         freqs, mags, power_bands = calculate_fft_features(processed, fs_hz, config.window)
