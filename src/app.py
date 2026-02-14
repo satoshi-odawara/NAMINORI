@@ -1,23 +1,127 @@
 import streamlit as st
 import numpy as np
-from src.core.models import SignalQuantity, AnalysisConfig, WindowFunction
+from src.core.models import SignalQuantity, AnalysisConfig, WindowFunction, VibrationFeatures
 from src.core.signal_processing import load_wav_file, remove_dc_offset, apply_butterworth_filter
 from src.core.feature_extraction import calculate_time_domain_features, calculate_fft_features
 from src.core.quality_check import calculate_quality_metrics, get_confidence_score
-from src.diagnostics.mt_method import MTSpace # Not fully implemented yet, but included for structure
+from src.diagnostics.mt_method import MTSpace
 from src.utils.audit_log import save_audit_log
 import tempfile
 import os
-from datetime import datetime # Added for AnalysisResult
+from datetime import datetime
 import plotly.graph_objects as go
-from scipy.signal import find_peaks # For peak annotation
+from scipy.signal import find_peaks
 
 st.set_page_config(layout="wide", page_title="振動解析Webアプリ")
 
 st.title("振動解析Webアプリケーション")
 
+# Initialize MTSpace in session state
+if 'mt_space' not in st.session_state:
+    st.session_state.mt_space = MTSpace()
+
+# MT Method Configuration in Sidebar
+st.sidebar.header("MT法設定")
+with st.sidebar.expander("正常データで単位空間を構築"):
+    normal_files = st.file_uploader(
+        "正常時のWAVファイルをアップロードしてください (複数選択可)",
+        type=["wav"],
+        accept_multiple_files=True,
+        key="mt_normal_uploader"
+    )
+
+    # Use default analysis config for training if main config not yet available (e.g., no file uploaded yet)
+    # or allow user to specify training specific filter settings
+    st.write("単位空間構築時のフィルタ設定:")
+    default_fs_for_training_ui = 44100 # A common default, used for UI max values
+    default_nyquist_for_training_ui = default_fs_for_training_ui / 2
+
+    col_train_hpf, col_train_lpf = st.columns(2)
+    with col_train_hpf:
+        train_hpf_val = st.number_input("HPF (訓練用)", value=10, min_value=0, max_value=int(default_nyquist_for_training_ui * 0.99), step=1, key="train_hpf_input")
+    with col_train_lpf:
+        train_lpf_val = st.number_input("LPF (訓練用)", value=int(default_nyquist_for_training_ui * 0.99), min_value=0, max_value=int(default_nyquist_for_training_ui * 0.99), step=1, key="train_lpf_input")
+    train_filter_order = st.number_input("フィルタ次数 (訓練用)", value=4, min_value=1, max_value=10, step=1, key="train_order_input")
+
+    # The actual fs_hz from the uploaded files will be used in load_wav_file
+    # This config is for feature extraction *during training*
+    training_analysis_config = AnalysisConfig(
+        quantity=st.session_state.get('selected_quantity', SignalQuantity.ACCEL), # Use session state if available
+        window=st.session_state.get('selected_window', WindowFunction.HANNING),   # Use session state if available
+        highpass_hz=float(train_hpf_val) if train_hpf_val > 0 else None,
+        lowpass_hz=float(train_lpf_val) if train_lpf_val < default_nyquist_for_training_ui * 0.99 else None,
+        filter_order=train_filter_order
+    )
+
+
+    if st.button("単位空間を構築/更新", key="build_mt_space"):
+        if normal_files:
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            processed_count = 0
+            
+            # Clear previous samples before re-building/updating
+            st.session_state.mt_space = MTSpace() # Re-initialize for a fresh start
+            
+            for i, file in enumerate(normal_files):
+                status_text.text(f"処理中: {file.name} ({i+1}/{len(normal_files)})")
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_f:
+                    tmp_f.write(file.getvalue())
+                    tmp_normal_file_path = tmp_f.name
+                
+                try:
+                    # Process file using the same pipeline as main analysis
+                    fs_normal, data_normal_raw, _ = load_wav_file(tmp_normal_file_path)
+                    
+                    # Ensure consistent processing with training_analysis_config
+                    processed_normal_data = remove_dc_offset(data_normal_raw)
+                    processed_normal_data = apply_butterworth_filter(
+                        processed_normal_data,
+                        fs_normal,
+                        training_analysis_config.highpass_hz,
+                        training_analysis_config.lowpass_hz,
+                        training_analysis_config.filter_order
+                    )
+                    
+                    normal_time_features = calculate_time_domain_features(processed_normal_data)
+                    
+                    # FFT and Power contribution are part of VibrationFeatures
+                    _, _, power_low, power_mid, power_high = \
+                        calculate_fft_features(processed_normal_data, fs_normal, training_analysis_config.window)
+                    
+                    # Create VibrationFeatures instance
+                    normal_features = VibrationFeatures(
+                        rms=normal_time_features.rms,
+                        peak=normal_time_features.peak,
+                        kurtosis=normal_time_features.kurtosis,
+                        skewness=normal_time_features.skewness,
+                        crest_factor=normal_time_features.crest_factor,
+                        shape_factor=normal_time_features.shape_factor,
+                        power_low=power_low,
+                        power_mid=power_mid,
+                        power_high=power_high
+                    )
+                    st.session_state.mt_space.add_normal_sample(normal_features)
+                    processed_count += 1
+                except Exception as e:
+                    st.error(f"ファイル {file.name} の処理中にエラーが発生しました: {e}")
+                finally:
+                    if os.path.exists(tmp_normal_file_path):
+                        os.remove(tmp_normal_file_path)
+                progress_bar.progress((i + 1) / len(normal_files))
+            
+            status_text.text(f"処理完了。{processed_count}個のファイルが単位空間に追加されました。")
+            st.success("単位空間が構築/更新されました。")
+        else:
+            st.warning("単位空間を構築するには、正常時のWAVファイルをアップロードしてください。")
+
+st.sidebar.info(f"単位空間ステータス: {st.session_state.mt_space.get_status()}")
+
+# Main application content
+# --------------------------------------------------------------------------------------------------
+
 # 1. WAVファイルアップロード
-uploaded_file = st.file_uploader("WAVファイルをアップロードしてください", type=["wav"])
+uploaded_file = st.file_uploader("評価用WAVファイルをアップロードしてください", type=["wav"], key="evaluation_uploader")
 
 if uploaded_file is not None:
     # Save the uploaded file to a temporary location
@@ -35,20 +139,27 @@ if uploaded_file is not None:
         st.write(f"データ長: {len(data_raw) / fs_hz:.2f} 秒")
         
         # Display basic analysis configuration options
-        st.sidebar.header("解析設定")
+        st.sidebar.header("評価用データ解析設定")
         selected_quantity = st.sidebar.selectbox(
             "物理量種別",
             options=list(SignalQuantity),
             format_func=lambda x: x.value,
-            index=0
+            index=0,
+            key="eval_quantity"
         )
+        # Store selected_quantity in session_state for training config
+        st.session_state.selected_quantity = selected_quantity
         
         selected_window = st.sidebar.selectbox(
             "窓関数",
             options=list(WindowFunction),
             format_func=lambda x: x.value,
-            index=0
+            index=0,
+            key="eval_window"
         )
+        # Store selected_window in session_state for training config
+        st.session_state.selected_window = selected_window
+
 
         # Placeholder for filter settings
         # Max value for cutoff frequencies should be strictly less than Nyquist frequency (fs_hz/2)
@@ -56,10 +167,10 @@ if uploaded_file is not None:
         
         col1, col2 = st.sidebar.columns(2)
         with col1:
-            highpass_hz = st.number_input("HPF (Hz)", value=10, min_value=0, max_value=int(nyquist_freq * 0.99), step=1)
+            highpass_hz = st.number_input("HPF (Hz)", value=10, min_value=0, max_value=int(nyquist_freq * 0.99), step=1, key="eval_hpf")
         with col2:
-            lowpass_hz = st.number_input("LPF (Hz)", value=int(nyquist_freq * 0.99), min_value=0, max_value=int(nyquist_freq * 0.99), step=1)
-        filter_order = st.sidebar.number_input("フィルタ次数", value=4, min_value=1, max_value=10, step=1)
+            lowpass_hz = st.number_input("LPF (Hz)", value=int(nyquist_freq * 0.99), min_value=0, max_value=int(nyquist_freq * 0.99), step=1, key="eval_lpf")
+        filter_order = st.sidebar.number_input("フィルタ次数", value=4, min_value=1, max_value=10, step=1, key="eval_order")
 
         analysis_config = AnalysisConfig(
             quantity=selected_quantity,
@@ -70,7 +181,7 @@ if uploaded_file is not None:
         )
         
         st.sidebar.write("---")
-        st.sidebar.subheader("現在のフィルタ条件:")
+        st.sidebar.subheader("現在の評価用データフィルタ条件:")
         if analysis_config.highpass_hz:
             st.sidebar.write(f"HPF: {analysis_config.highpass_hz} Hz")
         if analysis_config.lowpass_hz:
@@ -98,12 +209,18 @@ if uploaded_file is not None:
         with col_summary:
             st.subheader("解析結果 (時間領域)")
             time_features = calculate_time_domain_features(processed_data)
-            st.write(f"RMS: {time_features.rms:.3f}")
-            st.write(f"Peak: {time_features.peak:.3f}")
-            st.write(f"Kurtosis: {time_features.kurtosis:.3f}")
-            st.write(f"Skewness: {time_features.skewness:.3f}")
-            st.write(f"Crest Factor: {time_features.crest_factor:.3f}")
-            st.write(f"Shape Factor: {time_features.shape_factor:.3f}")
+            
+            # Display Time Domain KPIs side-by-side
+            kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
+            with kpi_col1:
+                st.metric(label="RMS", value=f"{time_features.rms:.3f}")
+                st.metric(label="Peak", value=f"{time_features.peak:.3f}")
+            with kpi_col2:
+                st.metric(label="Kurtosis", value=f"{time_features.kurtosis:.3f}")
+                st.metric(label="Skewness", value=f"{time_features.skewness:.3f}")
+            with kpi_col3:
+                st.metric(label="Crest Factor", value=f"{time_features.crest_factor:.3f}")
+                st.metric(label="Shape Factor", value=f"{time_features.shape_factor:.3f}")
         
         with col_time_plot:
             st.subheader("時間波形")
@@ -130,17 +247,108 @@ if uploaded_file is not None:
         col_freq_summary, col_freq_plot = st.columns([1, 2])
 
         with col_freq_summary:
-            st.write(f"パワー寄与率 (低周波): {power_low:.2%}")
-            st.write(f"パワー寄与率 (中周波): {power_mid:.2%}")
-            st.write(f"パワー寄与率 (高周波): {power_high:.2%}")
+            # Display Power Contributions side-by-side
+            power_col1, power_col2, power_col3 = st.columns(3)
+            with power_col1:
+                st.metric(label="低周波パワー寄与率", value=f"{power_low:.2%}")
+            with power_col2:
+                st.metric(label="中周波パワー寄与率", value=f"{power_mid:.2%}")
+            with power_col3:
+                st.metric(label="高周波パワー寄与率", value=f"{power_high:.2%}")
 
-            st.write(f"クリッピング率: {quality.clipping_ratio:.2%}")
-            st.write(f"S/N比: {quality.snr_db:.2f} dB")
-            st.write(f"診断信頼度: {confidence_score:.1f}%")
-
-            if confidence_score < 50:
-                st.warning("診断信頼度が低いです。データの品質を確認してください。")
+            st.write("---") # Separator
             
+            # Display Quality Metrics side-by-side
+            quality_col1, quality_col2 = st.columns(2) # Two columns for Clipping and SNR
+            with quality_col1:
+                st.metric(label="クリッピング率", value=f"{quality.clipping_ratio:.2%}")
+            with quality_col2:
+                st.metric(label="S/N比", value=f"{quality.snr_db:.2f} dB")
+            
+            # Color-coded Confidence Score (Red, Yellow, Green)
+            st.write("") # Add some vertical space
+            st.markdown("### 診断信頼度") # Custom header for confidence score
+
+            if confidence_score >= 80:
+                color = "green"
+                status_text = "良好"
+            elif confidence_score >= 50:
+                color = "orange" # Using orange for warning, as red is critical
+                status_text = "注意"
+            else:
+                color = "red"
+                status_text = "要確認"
+
+            st.markdown(
+                f"""
+                <div style="
+                    text-align: center; 
+                    padding: 10px; 
+                    border-radius: 5px; 
+                    background-color: #333333; 
+                    border: 2px solid {color};
+                ">
+                    <span style="font-size: 1.2em; color: white;">信頼度スコア</span><br>
+                    <span style="font-size: 2.5em; font-weight: bold; color: {color};">{confidence_score:.1f}%</span><br>
+                    <span style="font-size: 1.0em; color: {color};">{status_text}</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            
+            # --- MT Method Anomaly Detection ---
+            st.write("---")
+            st.markdown("### MT法診断結果")
+            if st.session_state.mt_space.mean_vector is not None:
+                # Prepare features for evaluation
+                evaluation_features = VibrationFeatures(
+                    rms=time_features.rms,
+                    peak=time_features.peak,
+                    kurtosis=time_features.kurtosis,
+                    skewness=time_features.skewness,
+                    crest_factor=time_features.crest_factor,
+                    shape_factor=time_features.shape_factor,
+                    power_low=power_low,
+                    power_mid=power_mid,
+                    power_high=power_high
+                )
+                md = st.session_state.mt_space.calculate_md(evaluation_features)
+
+                md_threshold_warning = 3.0 # Arbitrary threshold for warning
+                md_threshold_anomaly = 5.0 # Arbitrary threshold for anomaly
+
+                if md == np.inf:
+                    md_color = "gray"
+                    md_status_text = "単位空間未確立"
+                elif md < md_threshold_warning:
+                    md_color = "green"
+                    md_status_text = "正常"
+                elif md < md_threshold_anomaly:
+                    md_color = "orange"
+                    md_status_text = "要確認 (軽度異常)"
+                else:
+                    md_color = "red"
+                    md_status_text = "異常 (重度異常)"
+                
+                st.markdown(
+                    f"""
+                    <div style="
+                        text-align: center; 
+                        padding: 10px; 
+                        border-radius: 5px; 
+                        background-color: #333333; 
+                        border: 2px solid {md_color};
+                    ">
+                        <span style="font-size: 1.2em; color: white;">マハラノビス距離 (MD)</span><br>
+                        <span style="font-size: 2.5em; font-weight: bold; color: {md_color};">{md:.2f}</span><br>
+                        <span style="font-size: 1.0em; color: {md_color};">{md_status_text}</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.info("MT法診断には単位空間の構築が必要です。")
+
             # Frequency axis scale toggle
             freq_scale_type = st.radio("周波数軸スケール", ("線形", "対数"), horizontal=True)
 
@@ -187,4 +395,4 @@ if uploaded_file is not None:
             os.remove(tmp_file_path)
 
 else:
-    st.info("WAVファイルをアップロードして解析を開始してください。")
+    st.info("評価用WAVファイルをアップロードして解析を開始してください。")
