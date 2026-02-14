@@ -4,7 +4,7 @@
 - [x] ISSUE-002: Streamlit UI - 診断信頼度に基づいた色分けインジケータの実装 (赤・黄・緑) [CLOSED]
 - [x] ISSUE-003: Streamlit UI - MT法のための正常WAVファイルアップロード機能と単位空間構築UIの実装 [CLOSED]
 - [x] ISSUE-004: Streamlit UI - 解析されたデータに対するマハラノビス距離と異常ステータスの表示 [CLOSED]
-- [ ] ISSUE-005: Streamlit UI - 監査ログ（JSON）の画面表示およびダウンロード機能の実装 [OPEN]
+- [x] ISSUE-005: Streamlit UI - 監査ログ（JSON）の画面表示およびダウンロード機能の実装 [CLOSED]
 - [ ] ISSUE-006: Streamlit UI - Plotlyグラフのインタラクション強化 (ズーム、パン、スパイクノイズ確認) [OPEN]
 - [ ] ISSUE-007: Integration Test - WAVファイルアップロードから診断結果までのフルパイプラインテスト [OPEN]
 - [ ] ISSUE-008: Integration Test - UI設定とバックエンド処理の一貫性検証 [OPEN]
