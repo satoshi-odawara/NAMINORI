@@ -30,7 +30,7 @@
 - [x] ISSUE-028: [Documentation] Create User Guide for Custom Plugins [CLOSED]
 - [x] ISSUE-029: [Architect] Design Documentation Structure [CLOSED]
 - [x] ISSUE-030: [Developer] Update `README.md` [CLOSED]
-- [ ] ISSUE-031: [Developer] Create User Guide [OPEN]
+- [x] ISSUE-031: [Developer] Create User Guide [CLOSED]
 - [ ] ISSUE-032: [Developer] Move `PLUGINS.md` to `docs/` and integrate [OPEN]
 - [ ] ISSUE-033: [Developer] Document Evaluation Framework [OPEN]
 - [ ] ISSUE-034: [Architect] Create Technical Architecture Overview [OPEN]
