@@ -26,5 +26,5 @@
 - [x] ISSUE-024: [Architect] Design Noise Reduction Evaluation Metrics [CLOSED]
 - [x] ISSUE-025: [Developer] Implement Backend for Evaluation Framework [CLOSED]
 - [x] ISSUE-026: [Developer] Implement Evaluation UI in Streamlit [CLOSED]
-- [ ] ISSUE-027: [QA/Expert] Add Comprehensive Tests for Plugin Framework [OPEN]
+- [x] ISSUE-027: [QA/Expert] Add Comprehensive Tests for Plugin Framework [CLOSED]
 - [x] ISSUE-028: [Documentation] Create User Guide for Custom Plugins [CLOSED]

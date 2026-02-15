@@ -6,7 +6,7 @@ from src.core.quality_check import calculate_quality_metrics, get_confidence_sco
 from src.diagnostics.mt_method import MTSpace
 from src.utils.audit_log import AnalysisResult
 from src.core.plugins import plugin_manager
-from src.core.evaluation import NoiseReductionEvaluation
+from src.core.evaluation import NoiseReductionEvaluation, perform_nr_evaluation
 import pandas as pd
 import tempfile
 import os
@@ -42,17 +42,7 @@ def get_serializable_audit_log(result: AnalysisResult) -> dict:
 
     return log_data
 
-def perform_nr_evaluation(signal_pre_nr: np.ndarray, signal_post_nr: np.ndarray) -> NoiseReductionEvaluation:
-    """Calculates features before and after noise reduction for evaluation."""
-    features_before = calculate_time_domain_features(signal_pre_nr)
-    features_after = calculate_time_domain_features(signal_post_nr)
-    
-    return NoiseReductionEvaluation(
-        features_before=features_before,
-        features_after=features_after,
-        signal_pre_nr=signal_pre_nr,
-        signal_post_nr=signal_post_nr
-    )
+
 
 
 # --- Sidebar ---

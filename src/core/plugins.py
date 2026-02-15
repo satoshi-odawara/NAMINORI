@@ -6,6 +6,7 @@ import importlib
 import os
 import inspect
 from pathlib import Path
+import sys # Added for dynamic module loading
 
 # Define a type for the parameter dictionary to improve readability
 ParameterType = Literal['number_input', 'slider']
@@ -91,9 +92,14 @@ class PluginManager:
             if file.name == "__init__.py":
                 continue
 
-            module_name = f"{plugin_dir.replace('/', '.')}.{file.stem}"
+            # Load module directly from file path
+            module_name = file.stem
             try:
-                module = importlib.import_module(module_name)
+                spec = importlib.util.spec_from_file_location(module_name, file)
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[module_name] = module # Add to sys.modules to prevent re-import issues
+                spec.loader.exec_module(module)
+
                 for name, obj in inspect.getmembers(module, inspect.isclass):
                     # Check if the class is a subclass of NoiseReductionPlugin and not the base class itself
                     if issubclass(obj, NoiseReductionPlugin) and obj is not NoiseReductionPlugin:

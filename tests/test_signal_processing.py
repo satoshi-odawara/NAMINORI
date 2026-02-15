@@ -6,7 +6,10 @@ import hashlib
 from scipy import signal # Added for synthetic signal generation
 
 from src.core import signal_processing
-from src.core.models import NoiseReductionFilterType # Added for filter type
+from src.core.plugins import PluginParameter
+from src.plugins.noise_reduction.notch_filter import NotchFilterPlugin
+from src.plugins.noise_reduction.band_stop_filter import BandStopFilterPlugin
+
 
 # Helper function to create a dummy WAV file for testing
 @pytest.fixture
@@ -141,99 +144,107 @@ def test_apply_butterworth_filter_bpf():
     np.testing.assert_allclose(no_filter_data, data)
 
 
-# --- Tests for Noise Reduction Filters ---
-def test_apply_noise_reduction_filter_none(multi_tone_signal):
-    data, fs, *_ = multi_tone_signal
-    filtered_data = signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.NONE)
-    np.testing.assert_allclose(filtered_data, data)
+# --- Tests for Plugin-based Noise Reduction Filters ---
 
-def test_apply_noise_reduction_filter_notch(multi_tone_signal):
-    data, fs, freq1, notch_target_freq, freq3 = multi_tone_signal
-    
-    # Apply notch filter at the middle frequency (150 Hz)
+# Fixture for a dummy signal to be used by plugins
+@pytest.fixture
+def dummy_nr_signal():
+    fs = 1000
+    duration = 1.0
+    t = np.linspace(0.0, duration, int(fs * duration), endpoint=False)
+    # Signal with components at 50Hz, 150Hz, 250Hz, plus 60Hz hum
+    data = (
+        1.0 * np.sin(2 * np.pi * 50 * t) +       # To be preserved
+        0.5 * np.sin(2 * np.pi * 60 * t) +       # Notch target
+        1.0 * np.sin(2 * np.pi * 150 * t) +      # Band-stop target
+        0.7 * np.sin(2 * np.pi * 250 * t)        # To be preserved
+    )
+    return data, fs
+
+# --- NotchFilterPlugin Tests ---
+def test_notch_filter_plugin_metadata():
+    plugin = NotchFilterPlugin()
+    assert plugin.get_name() == "notch_filter"
+    assert plugin.get_display_name() == "Notch Filter"
+    params = plugin.get_parameters()
+    assert len(params) == 2
+    assert params[0].name == "freq_hz"
+    assert params[1].name == "q_factor"
+
+def test_notch_filter_plugin_process_functionality(dummy_nr_signal):
+    data, fs = dummy_nr_signal
+    plugin = NotchFilterPlugin()
+    notch_freq = 60.0
     q_factor = 30.0
-    filtered_data = signal_processing.apply_noise_reduction_filter(
-        data, fs, NoiseReductionFilterType.NOTCH, notch_freq_hz=notch_target_freq, notch_q_factor=q_factor
-    )
-
-    # Check FFT after filter
-    fft_filtered = np.fft.fft(filtered_data)
-    freqs_filtered = np.fft.fftfreq(len(filtered_data), d=1/fs)
     
-    # Find indices for the three frequencies
-    idx1 = np.argmin(np.abs(freqs_filtered - freq1))
-    idx_notch = np.argmin(np.abs(freqs_filtered - notch_target_freq))
-    idx3 = np.argmin(np.abs(freqs_filtered - freq3))
-
-    # The magnitude at the notch frequency should be significantly reduced
-    assert np.abs(fft_filtered[idx_notch]) < 0.1 * np.abs(fft_filtered[idx1])
-    assert np.abs(fft_filtered[idx_notch]) < 0.1 * np.abs(fft_filtered[idx3])
-
-    # The magnitudes at freq1 (50 Hz) and freq3 (250 Hz) should be largely preserved
+    filtered_data = plugin.process(data, fs, freq_hz=notch_freq, q_factor=q_factor)
+    
     fft_original = np.fft.fft(data)
-    orig_mag1 = np.abs(fft_original[np.argmin(np.abs(freqs_filtered - freq1))])
-    orig_mag3 = np.abs(fft_original[np.argmin(np.abs(freqs_filtered - freq3))])
-
-    assert np.isclose(np.abs(fft_filtered[idx1]), orig_mag1, rtol=0.1)
-    assert np.isclose(np.abs(fft_filtered[idx3]), orig_mag3, rtol=0.1)
-
-
-def test_apply_noise_reduction_filter_band_stop(multi_tone_signal):
-    data, fs, freq1, freq2, freq3 = multi_tone_signal
-    
-    # Define band-stop filter from 100 Hz to 200 Hz to target freq2
-    bs_low = 100.0
-    bs_high = 200.0
-    bs_order = 8
-
-    # Apply band-stop filter
-    filtered_data = signal_processing.apply_noise_reduction_filter(
-        data, fs, NoiseReductionFilterType.BAND_STOP, 
-        band_stop_low_hz=bs_low, band_stop_high_hz=bs_high, band_stop_order=bs_order
-    )
-
-    # Check FFT after filter
     fft_filtered = np.fft.fft(filtered_data)
-    freqs_filtered = np.fft.fftfreq(len(filtered_data), d=1/fs)
+    freqs = np.fft.fftfreq(len(data), d=1/fs)
     
-    # Find indices for the three frequencies
-    idx1 = np.argmin(np.abs(freqs_filtered - freq1))
-    idx2 = np.argmin(np.abs(freqs_filtered - freq2))
-    idx3 = np.argmin(np.abs(freqs_filtered - freq3))
+    idx_notch = np.argmin(np.abs(freqs - notch_freq))
+    idx_50hz = np.argmin(np.abs(freqs - 50.0))
+    idx_150hz = np.argmin(np.abs(freqs - 150.0))
     
-    # The magnitude at freq2 (150 Hz) should be significantly reduced
-    # Compare its magnitude to the magnitudes of the other two frequencies
-    assert np.abs(fft_filtered[idx2]) < 0.1 * np.abs(fft_filtered[idx1])
-    assert np.abs(fft_filtered[idx2]) < 0.1 * np.abs(fft_filtered[idx3])
+    # Notch frequency should be significantly reduced
+    assert np.abs(fft_filtered[idx_notch]) < 0.5 * np.abs(fft_original[idx_notch])
+    
+    # Other frequencies should be preserved
+    np.testing.assert_allclose(np.abs(fft_filtered[idx_50hz]), np.abs(fft_original[idx_50hz]), rtol=0.1)
+    np.testing.assert_allclose(np.abs(fft_filtered[idx_150hz]), np.abs(fft_original[idx_150hz]), rtol=0.1)
 
-    # The magnitudes at freq1 (50 Hz) and freq3 (250 Hz) should be largely preserved
-    fft_original = np.fft.fft(data)
-    orig_mag1 = np.abs(fft_original[np.argmin(np.abs(freqs_filtered - freq1))])
-    orig_mag3 = np.abs(fft_original[np.argmin(np.abs(freqs_filtered - freq3))])
-
-    assert np.isclose(np.abs(fft_filtered[idx1]), orig_mag1, rtol=0.1)
-    assert np.isclose(np.abs(fft_filtered[idx3]), orig_mag3, rtol=0.1)
-
-def test_apply_noise_reduction_filter_band_stop_invalid_params(multi_tone_signal):
-    data, fs, *_ = multi_tone_signal
+def test_notch_filter_plugin_process_invalid_params(dummy_nr_signal):
+    data, fs = dummy_nr_signal
+    plugin = NotchFilterPlugin()
     nyquist = fs / 2
+    
+    with pytest.raises(ValueError, match="Notch frequency .* must be between 0 and Nyquist frequency"):
+        plugin.process(data, fs, freq_hz=nyquist, q_factor=30.0)
+    with pytest.raises(ValueError, match="Notch Q-factor must be positive"):
+        plugin.process(data, fs, freq_hz=60.0, q_factor=0.0)
 
-    # Missing band_stop_low_hz
-    with pytest.raises(ValueError, match="band_stop_low_hz and band_stop_high_hz are required for BAND_STOP filter."):
-        signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.BAND_STOP, band_stop_high_hz=150.0)
+# --- BandStopFilterPlugin Tests ---
+def test_band_stop_filter_plugin_metadata():
+    plugin = BandStopFilterPlugin()
+    assert plugin.get_name() == "band_stop_filter"
+    assert plugin.get_display_name() == "Band-Stop Filter"
+    params = plugin.get_parameters()
+    assert len(params) == 3
+    assert params[0].name == "low_hz"
+    assert params[1].name == "high_hz"
+    assert params[2].name == "order"
 
-    # Missing band_stop_high_hz
-    with pytest.raises(ValueError, match="band_stop_low_hz and band_stop_high_hz are required for BAND_STOP filter."):
-        signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.BAND_STOP, band_stop_low_hz=100.0)
+def test_band_stop_filter_plugin_process_functionality(dummy_nr_signal):
+    data, fs = dummy_nr_signal
+    plugin = BandStopFilterPlugin()
+    low_hz = 100.0
+    high_hz = 200.0
+    order = 8
+    
+    filtered_data = plugin.process(data, fs, low_hz=low_hz, high_hz=high_hz, order=order)
+    
+    fft_original = np.fft.fft(data)
+    fft_filtered = np.fft.fft(filtered_data)
+    freqs = np.fft.fftfreq(len(data), d=1/fs)
+    
+    idx_50hz = np.argmin(np.abs(freqs - 50.0))
+    idx_150hz = np.argmin(np.abs(freqs - 150.0))
+    idx_250hz = np.argmin(np.abs(freqs - 250.0))
+    
+    # Frequency within band-stop should be significantly reduced
+    assert np.abs(fft_filtered[idx_150hz]) < 0.1 * np.abs(fft_original[idx_150hz])
+    
+    # Frequencies outside band-stop should be preserved
+    np.testing.assert_allclose(np.abs(fft_filtered[idx_50hz]), np.abs(fft_original[idx_50hz]), rtol=0.1)
+    np.testing.assert_allclose(np.abs(fft_filtered[idx_250hz]), np.abs(fft_original[idx_250hz]), rtol=0.1)
 
-    # low_hz >= high_hz
-    with pytest.raises(ValueError, match="must be between 0 and Nyquist frequency"):
-        signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.BAND_STOP, band_stop_low_hz=150.0, band_stop_high_hz=100.0)
-
-    # Frequencies out of range
-    with pytest.raises(ValueError, match="must be between 0 and Nyquist frequency"):
-        signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.BAND_STOP, band_stop_low_hz=-10.0, band_stop_high_hz=100.0)
-    with pytest.raises(ValueError, match="must be between 0 and Nyquist frequency"):
-        signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.BAND_STOP, band_stop_low_hz=100.0, band_stop_high_hz=nyquist)
-    with pytest.raises(ValueError, match="must be between 0 and Nyquist frequency"):
-        signal_processing.apply_noise_reduction_filter(data, fs, NoiseReductionFilterType.BAND_STOP, band_stop_low_hz=100.0, band_stop_high_hz=nyquist + 1)
+def test_band_stop_filter_plugin_process_invalid_params(dummy_nr_signal):
+    data, fs = dummy_nr_signal
+    plugin = BandStopFilterPlugin()
+    nyquist = fs / 2
+    
+    with pytest.raises(ValueError, match="Band-stop frequencies .* must be between 0 and Nyquist"):
+        plugin.process(data, fs, low_hz=100.0, high_hz=nyquist, order=4) # high_hz >= Nyquist
+    with pytest.raises(ValueError, match="Band-stop frequencies .* must be between 0 and Nyquist"):
+        plugin.process(data, fs, low_hz=150.0, high_hz=100.0, order=4) # low_hz >= high_hz

@@ -2,7 +2,7 @@ import os
 import glob
 from pathlib import Path
 import numpy as np
-from typing import List
+from typing import List, Optional, Dict, Any
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -13,23 +13,30 @@ from dataclasses import asdict
 import sys
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
-from src.core.models import AnalysisConfig, SignalQuantity, WindowFunction, VibrationFeatures, NoiseReductionFilterType
-from src.core.signal_processing import load_wav_file, remove_dc_offset, apply_butterworth_filter, apply_noise_reduction_filter
+from src.core.models import AnalysisConfig, SignalQuantity, WindowFunction, VibrationFeatures
+from src.core.signal_processing import load_wav_file, remove_dc_offset, apply_butterworth_filter
 from src.core.feature_extraction import calculate_time_domain_features, calculate_fft_features
 from src.diagnostics.mt_method import MTSpace
+from src.core.plugins import plugin_manager # Import plugin manager for test
+from src.core.evaluation import perform_nr_evaluation, NoiseReductionEvaluation # Import evaluation components
+
+# Ensure plugins are loaded for tests
+plugin_manager.load_plugins()
 
 # --- Configuration ---
 BASE_PATH = Path("bench/DCASE-2020-Task2-Dataset/pump")
 TRAIN_NORMAL_DIR = BASE_PATH / "train"
 TEST_DIR = BASE_PATH / "test"
 
+# Updated ANALYSIS_CONFIG to use the plugin system
 ANALYSIS_CONFIG = AnalysisConfig(
     quantity=SignalQuantity.ACCEL,
     window=WindowFunction.HANNING,
     highpass_hz=10,
     lowpass_hz=None,
     filter_order=4,
-    noise_reduction_type=NoiseReductionFilterType.NONE # Default to no noise reduction
+    noise_reduction_plugin_name=None, # Default to no noise reduction plugin
+    noise_reduction_plugin_params=None
 )
 
 # --- Utility Functions ---
@@ -40,24 +47,38 @@ def get_wav_files(directory: Path, pattern: str = "*.wav") -> List[Path]:
         return []
     return list(directory.rglob(pattern))
 
-def extract_features_from_file(file_path: str, config: AnalysisConfig) -> VibrationFeatures:
+def extract_features_from_file(
+    file_path: str, 
+    config: AnalysisConfig,
+    plugin_name: Optional[str] = None,
+    plugin_params: Optional[Dict[str, Any]] = None
+) -> VibrationFeatures:
     """Helper function to run the modular pipeline and extract features."""
     fs_hz, data_normalized, _ = load_wav_file(file_path)
     
     # Processing pipeline
-    data_processed = remove_dc_offset(data_normalized)
-    data_processed = apply_butterworth_filter(
-        data_processed, fs_hz, config.highpass_hz, config.lowpass_hz, config.filter_order
-    )
-    data_processed = apply_noise_reduction_filter(
-        data_processed, fs_hz, config.noise_reduction_type,
-        config.notch_freq_hz, config.notch_q_factor,
-        config.band_stop_low_hz, config.band_stop_high_hz, config.band_stop_order
+    processed_dc_removed = remove_dc_offset(data_normalized)
+    
+    signal_pre_nr = apply_butterworth_filter(
+        processed_dc_removed, fs_hz, config.highpass_hz, config.lowpass_hz, config.filter_order
     )
     
+    processed_final = signal_pre_nr
+
+    if plugin_name and plugin_params:
+        selected_plugin = plugin_manager.get_plugin(plugin_name)
+        if selected_plugin:
+            processed_final = selected_plugin.process(
+                signal_pre_nr,
+                fs_hz,
+                **plugin_params
+            )
+        else:
+            raise ValueError(f"Plugin '{plugin_name}' not found.")
+    
     # Feature extraction
-    time_features = calculate_time_domain_features(data_processed)
-    _, _, power_bands = calculate_fft_features(data_processed, fs_hz, config.window)
+    time_features = calculate_time_domain_features(processed_final)
+    _, _, power_bands = calculate_fft_features(processed_final, fs_hz, config.window)
     
     # Combine features
     vibration_features = VibrationFeatures(
@@ -68,14 +89,19 @@ def extract_features_from_file(file_path: str, config: AnalysisConfig) -> Vibrat
     )
     return vibration_features
 
-def train_unit_space(normal_data_paths: List[Path], config: AnalysisConfig) -> MTSpace:
+def train_unit_space(
+    normal_data_paths: List[Path], 
+    config: AnalysisConfig,
+    plugin_name: Optional[str] = None,
+    plugin_params: Optional[Dict[str, Any]] = None
+) -> MTSpace:
     """Trains the MTSpace using normal data."""
     print("--- 単位空間の学習開始 ---")
     mt_space = MTSpace()
     
     for i, file_path in enumerate(normal_data_paths):
         try:
-            features = extract_features_from_file(str(file_path), config)
+            features = extract_features_from_file(str(file_path), config, plugin_name, plugin_params)
             mt_space.add_normal_sample(features)
             print(f"  {i+1}/{len(normal_data_paths)}: '{file_path.name}' の特徴量を抽出しました。")
         except Exception as e:
@@ -88,7 +114,14 @@ def train_unit_space(normal_data_paths: List[Path], config: AnalysisConfig) -> M
     print(f"--- 単位空間の学習完了 (データ数: {len(mt_space.feature_vectors)}) ---")
     return mt_space
 
-def evaluate_mt_method(test_data_paths: List[Path], unit_space: MTSpace, config: AnalysisConfig, anomaly_threshold: float = 3.0) -> pd.DataFrame:
+def evaluate_mt_method(
+    test_data_paths: List[Path], 
+    unit_space: MTSpace, 
+    config: AnalysisConfig, 
+    anomaly_threshold: float = 3.0,
+    plugin_name: Optional[str] = None,
+    plugin_params: Optional[Dict[str, Any]] = None
+) -> pd.DataFrame:
     """Evaluates the MT method using test data."""
     print(f"\n--- MT法による評価開始 (閾値: {anomaly_threshold:.2f}) ---")
     results = []
@@ -96,7 +129,7 @@ def evaluate_mt_method(test_data_paths: List[Path], unit_space: MTSpace, config:
     for i, file_path in enumerate(test_data_paths):
         label = "anomaly" if "anomaly" in file_path.name.lower() else "normal"
         try:
-            features = extract_features_from_file(str(file_path), config)
+            features = extract_features_from_file(str(file_path), config, plugin_name, plugin_params)
             md = unit_space.calculate_md(features)
             
             prediction = "異常" if md is not None and md > anomaly_threshold else "正常"
@@ -222,13 +255,15 @@ def run_mt_evaluation_test():
         return
 
     try:
-        trained_unit_space = train_unit_space(train_normal_files, ANALYSIS_CONFIG)
+        # Pass plugin configuration to train_unit_space
+        trained_unit_space = train_unit_space(train_normal_files, ANALYSIS_CONFIG, ANALYSIS_CONFIG.noise_reduction_plugin_name, ANALYSIS_CONFIG.noise_reduction_plugin_params)
     except Exception as e:
         print(f"単位空間学習中にエラー: {e}")
         return
 
     anomaly_threshold = 3.0
-    df_results = evaluate_mt_method(all_test_files, trained_unit_space, ANALYSIS_CONFIG, anomaly_threshold)
+    # Pass plugin configuration to evaluate_mt_method
+    df_results = evaluate_mt_method(all_test_files, trained_unit_space, ANALYSIS_CONFIG, anomaly_threshold, ANALYSIS_CONFIG.noise_reduction_plugin_name, ANALYSIS_CONFIG.noise_reduction_plugin_params)
 
     if not df_results.empty:
         visualize_md_results(df_results, anomaly_threshold, "mt_evaluation_results.html", trained_unit_space)
