@@ -46,6 +46,24 @@ All initial development phases, including core backend refactoring, MT method im
 
 ---
 
+## Phase 8: Documentation Enhancement
+
+**Objective:** Provide comprehensive and up-to-date documentation for the application, covering usage, plugin development, and technical architecture.
+
+**Estimated Duration:** 2-3 weeks
+
+**Tasks:**
+
+1.  **[Architect] Design Documentation Structure (`ISSUE-029`):** NOT STARTED
+2.  **[Developer] Update `README.md` (`ISSUE-030`):** NOT STARTED
+3.  **[Developer] Create User Guide (`ISSUE-031`):** NOT STARTED
+4.  **[Developer] Move `PLUGINS.md` to `docs/` and integrate (`ISSUE-032`):** NOT STARTED
+5.  **[Developer] Document Evaluation Framework (`ISSUE-033`):** NOT STARTED
+6.  **[Architect] Create Technical Architecture Overview (`ISSUE-034`):** NOT STARTED
+7.  **[QA/Expert] Review and Verify Documentation (`ISSUE-035`):** NOT STARTED
+
+---
+
 ## General Guidelines:
 
 *   **Adherence to `GEMINI.md`:** All implementations must strictly follow the conventions, physical validity principles and quality standards outlined in `GEMINI.md`.
