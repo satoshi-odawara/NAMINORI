@@ -28,7 +28,7 @@
 - [x] ISSUE-026: [Developer] Implement Evaluation UI in Streamlit [CLOSED]
 - [x] ISSUE-027: [QA/Expert] Add Comprehensive Tests for Plugin Framework [CLOSED]
 - [x] ISSUE-028: [Documentation] Create User Guide for Custom Plugins [CLOSED]
-- [ ] ISSUE-029: [Architect] Design Documentation Structure [OPEN]
+- [x] ISSUE-029: [Architect] Design Documentation Structure [CLOSED]
 - [ ] ISSUE-030: [Developer] Update `README.md` [OPEN]
 - [ ] ISSUE-031: [Developer] Create User Guide [OPEN]
 - [ ] ISSUE-032: [Developer] Move `PLUGINS.md` to `docs/` and integrate [OPEN]
