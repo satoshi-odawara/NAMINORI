@@ -8,6 +8,8 @@ NAMINORIは、製造現場や事業運用に耐える品質を目指して開発
 
 *   **WAVファイル解析:** LPCM 16/24/32bit WAV形式の振動データをアップロードし解析。
 *   **信号処理:** DC成分除去、Butterworthフィルタ（LPF/HPF/BPF）、窓関数（Hanning/Flat Top）適用。
+*   **プラグイン式ノイズ除去フレームワーク:** ユーザー定義のカスタムノイズ除去アルゴリズムを動的にロード・適用可能。
+*   **ノイズ除去効果評価フレームワーク:** 適用されたノイズ除去フィルターの効果を客観的に評価し可視化。
 *   **特徴量抽出:** 時間領域（RMS, Peak, Kurtosisなど）、周波数領域（FFT, パワー寄与率）の特徴量を抽出。
 *   **データ品質評価:** クリッピング検出、S/N比推定、診断信頼度スコア算出。
 *   **MT法（マハラノビス・タグチ法）による異常診断:** 正常データからの逸脱度を評価。
@@ -84,6 +86,10 @@ You can now view your Streamlit app in your browser.
 3.  **解析結果の確認:** 時間領域・周波数領域の特徴量、データ品質、信頼度スコア、およびグラフが表示されます。
 4.  **グラフの操作:** Plotlyグラフはインタラクティブであり、拡大・縮小、パン、データポイントの情報の確認が可能です。FFTスペクトルでは周波数軸の線形/対数スケール切り替えやピークのアノテーションが表示されます。
 
+## ドキュメント
+
+より詳細な情報や、カスタムプラグインの開発方法については、[ドキュメント](docs/index.md)を参照してください。
+
 ## テスト
 
 開発中にユニットテストを実行するには、以下のコマンドを使用します。
@@ -103,19 +109,33 @@ vibration-ai/
 │   │   ├── models.py             # データモデル (dataclass, Enum)
 │   │   ├── signal_processing.py  # 信号処理コア
 │   │   ├── feature_extraction.py # 特徴量抽出
-│   │   └── quality_check.py      # データ品質評価
+│   │   ├── quality_check.py      # データ品質評価
+│   │   ├── plugins.py            # プラグインアーキテクチャ定義
+│   │   └── evaluation.py         # ノイズ除去評価フレームワーク
 │   ├── diagnostics/
 │   │   └── mt_method.py          # MT法実装
+│   ├── plugins/                  # カスタムプラグイン
+│   │   └── noise_reduction/      # ノイズ除去プラグイン
 │   └── utils/
 │       └── audit_log.py          # 監査ログ管理
 ├── data/
 │   ├── samples/                  # テスト用WAVファイル (Git管理外)
 │   └── unit_space/               # MT法単位空間データ (Git管理外)
+├── docs/                         # ドキュメントルート
+│   ├── index.md                  # ドキュメントインデックス
+│   ├── user_guide.md             # ユーザーガイド
+│   ├── plugins/                  # プラグイン関連ドキュメント
+│   │   └── index.md
+│   │   └── custom_plugins.md
+│   ├── evaluation.md             # 評価フレームワークドキュメント
+│   └── architecture.md           # アーキテクチャ概要
 ├── tests/
 │   ├── test_signal_processing.py
 │   ├── test_feature_extraction.py
 │   ├── test_quality_check.py
-│   └── test_mt_method.py
+│   ├── test_mt_method.py
+│   ├── test_plugins.py           # プラグインマネージャーテスト
+│   └── test_evaluation.py        # 評価フレームワークテスト
 ├── requirements.txt              # Pythonの依存ライブラリ
 ├── README.md                     # このファイル
 └── GEMINI.md                     # プロジェクト開発規約

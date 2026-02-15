@@ -29,7 +29,7 @@
 - [x] ISSUE-027: [QA/Expert] Add Comprehensive Tests for Plugin Framework [CLOSED]
 - [x] ISSUE-028: [Documentation] Create User Guide for Custom Plugins [CLOSED]
 - [x] ISSUE-029: [Architect] Design Documentation Structure [CLOSED]
-- [ ] ISSUE-030: [Developer] Update `README.md` [OPEN]
+- [x] ISSUE-030: [Developer] Update `README.md` [CLOSED]
 - [ ] ISSUE-031: [Developer] Create User Guide [OPEN]
 - [ ] ISSUE-032: [Developer] Move `PLUGINS.md` to `docs/` and integrate [OPEN]
 - [ ] ISSUE-033: [Developer] Document Evaluation Framework [OPEN]
