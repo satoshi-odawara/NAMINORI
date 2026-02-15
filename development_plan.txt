@@ -72,7 +72,7 @@ All initial development phases, including core backend refactoring, MT method im
 
 **Tasks:**
 
-1.  **[Architect] Design Spectral Subtraction Algorithm and Data Flow (`ISSUE-036`):** NOT STARTED
+1.  **[Architect] Design Spectral Subtraction Algorithm and Data Flow (`ISSUE-036`):** COMPLETED
 2.  **[Developer] Implement Spectral Subtraction Plugin (Backend) (`ISSUE-037`):** NOT STARTED
 3.  **[Developer] Implement Noise Profile Learning in MTSpace (`ISSUE-038`):** NOT STARTED
 4.  **[Developer] Update Streamlit UI for Noise Profile Configuration (`ISSUE-039`):** NOT STARTED

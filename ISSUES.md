@@ -35,7 +35,7 @@
 - [x] ISSUE-033: [Developer] Document Evaluation Framework [CLOSED]
 - [x] ISSUE-034: [Architect] Create Technical Architecture Overview [CLOSED]
 - [x] ISSUE-035: [QA/Expert] Review and Verify Documentation [CLOSED]
-- [ ] ISSUE-036: [Architect] Design Spectral Subtraction Algorithm and Data Flow [OPEN]
+- [x] ISSUE-036: [Architect] Design Spectral Subtraction Algorithm and Data Flow [CLOSED]
 - [ ] ISSUE-037: [Developer] Implement Spectral Subtraction Plugin (Backend) [OPEN]
 - [ ] ISSUE-038: [Developer] Implement Noise Profile Learning in MTSpace [OPEN]
 - [ ] ISSUE-039: [Developer] Update Streamlit UI for Noise Profile Configuration [OPEN]
