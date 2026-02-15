@@ -58,7 +58,7 @@ All initial development phases, including core backend refactoring, MT method im
 2.  **[Developer] Update `README.md` (`ISSUE-030`):** COMPLETED
 3.  **[Developer] Create User Guide (`ISSUE-031`):** COMPLETED
 4.  **[Developer] Move `PLUGINS.md` to `docs/` and integrate (`ISSUE-032`):** COMPLETED
-5.  **[Developer] Document Evaluation Framework (`ISSUE-033`):** NOT STARTED
+5.  **[Developer] Document Evaluation Framework (`ISSUE-033`):** COMPLETED
 6.  **[Architect] Create Technical Architecture Overview (`ISSUE-034`):** NOT STARTED
 7.  **[QA/Expert] Review and Verify Documentation (`ISSUE-035`):** NOT STARTED
 
