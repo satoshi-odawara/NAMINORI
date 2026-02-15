@@ -76,7 +76,7 @@ All initial development phases, including core backend refactoring, MT method im
 2.  **[Developer] Implement Spectral Subtraction Plugin (Backend) (`ISSUE-037`):** NOT STARTED
 3.  **[Developer] Implement Noise Profile Learning in MTSpace (`ISSUE-038`):** NOT STARTED
 4.  **[Developer] Update Streamlit UI for Noise Profile Configuration (`ISSUE-039`):** NOT STARTED
-5.  **[QA/Expert] Add Unit Tests for Spectral Subtraction Plugin (`ISSUE-030`):** NOT STARTED
+5.  **[QA/Expert] Add Unit Tests for Spectral Subtraction Plugin (`ISSUE-040`):** COMPLETED
 6.  **[QA/Expert] Add Integration/Regression Tests for Spectral Subtraction (`ISSUE-041`):** NOT STARTED
 7.  **[Documentation] Document Spectral Subtraction Plugin (`ISSUE-042`):** NOT STARTED
 
