@@ -73,12 +73,30 @@ All initial development phases, including core backend refactoring, MT method im
 **Tasks:**
 
 1.  **[Architect] Design Spectral Subtraction Algorithm and Data Flow (`ISSUE-036`):** COMPLETED
-2.  **[Developer] Implement Spectral Subtraction Plugin (Backend) (`ISSUE-037`):** NOT STARTED
-3.  **[Developer] Implement Noise Profile Learning in MTSpace (`ISSUE-038`):** NOT STARTED
-4.  **[Developer] Update Streamlit UI for Noise Profile Configuration (`ISSUE-039`):** NOT STARTED
+2.  **[Developer] Implement Spectral Subtraction Plugin (Backend) (`ISSUE-037`):** COMPLETED
+3.  **[Developer] Implement Noise Profile Learning in MTSpace (`ISSUE-038`):** COMPLETED
+4.  **[Developer] Update Streamlit UI for Noise Profile Configuration (`ISSUE-039`):** COMPLETED
 5.  **[QA/Expert] Add Unit Tests for Spectral Subtraction Plugin (`ISSUE-040`):** COMPLETED
-6.  **[QA/Expert] Add Integration/Regression Tests for Spectral Subtraction (`ISSUE-041`):** NOT STARTED
-7.  **[Documentation] Document Spectral Subtraction Plugin (`ISSUE-042`):** NOT STARTED
+6.  **[QA/Expert] Add Integration/Regression Tests for Spectral Subtraction (`ISSUE-041`):** COMPLETED
+7.  **[Documentation] Document Spectral Subtraction Plugin (`ISSUE-042`):** COMPLETED
+
+---
+
+## Phase 10: Benchmarking Framework
+
+**Objective:** Implement a robust framework for evaluating the application's performance using benchmark datasets, providing quantitative metrics and reproducible results.
+
+**Estimated Duration:** 3-4 weeks
+
+**Tasks:**
+
+1.  **[Architect] Design Benchmarking Framework and Data Structure (`ISSUE-043`):** NOT STARTED
+2.  **[Developer] Implement Benchmarking Backend Logic (`ISSUE-044`):** NOT STARTED
+3.  **[Developer] Update `MTSpace` for Noise Profile Learning during Benchmark (`ISSUE-045`):** NOT STARTED
+4.  **[Developer] Implement Benchmarking UI in Streamlit (`ISSUE-046`):** NOT STARTED
+5.  **[QA/Expert] Add Unit/Integration Tests for Benchmarking (`ISSUE-047`):** NOT STARTED
+6.  **[QA/Expert] Add Regression Tests for Benchmarking Results (`ISSUE-048`):** NOT STARTED
+7.  **[Documentation] Document Benchmarking Feature (`ISSUE-049`):** NOT STARTED
 
 ---
 
