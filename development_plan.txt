@@ -90,13 +90,13 @@ All initial development phases, including core backend refactoring, MT method im
 
 **Tasks:**
 
-1.  **[Architect] Design Benchmarking Framework and Data Structure (`ISSUE-043`):** NOT STARTED
-2.  **[Developer] Implement Benchmarking Backend Logic (`ISSUE-044`):** NOT STARTED
-3.  **[Developer] Update `MTSpace` for Noise Profile Learning during Benchmark (`ISSUE-045`):** NOT STARTED
-4.  **[Developer] Implement Benchmarking UI in Streamlit (`ISSUE-046`):** NOT STARTED
-5.  **[QA/Expert] Add Unit/Integration Tests for Benchmarking (`ISSUE-047`):** NOT STARTED
-6.  **[QA/Expert] Add Regression Tests for Benchmarking Results (`ISSUE-048`):** NOT STARTED
-7.  **[Documentation] Document Benchmarking Feature (`ISSUE-049`):** NOT STARTED
+1.  **[Architect] Design Benchmarking Framework and Data Structure (`ISSUE-043`):** COMPLETED
+2.  **[Developer] Implement Benchmarking Backend Logic (`ISSUE-044`):** COMPLETED
+3.  **[Developer] Update `MTSpace` for Noise Profile Learning during Benchmark (`ISSUE-045`):** COMPLETED
+4.  **[Developer] Implement Benchmarking UI in Streamlit (`ISSUE-046`):** COMPLETED
+5.  **[QA/Expert] Add Unit/Integration Tests for Benchmarking (`ISSUE-047`):** COMPLETED
+6.  **[QA/Expert] Add Regression Tests for Benchmarking Results (`ISSUE-048`):** COMPLETED
+7.  **[Documentation] Document Benchmarking Feature (`ISSUE-049`):** COMPLETED
 
 ---
 
