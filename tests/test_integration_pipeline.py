@@ -123,7 +123,8 @@ def run_full_analysis_pipeline(
     file_path: Path,
     fs_expected: int,
     plugin_name: Optional[str] = None,
-    plugin_params: Optional[Dict[str, Any]] = None
+    plugin_params: Optional[Dict[str, Any]] = None,
+    p_noise_avg: Optional[np.ndarray] = None # New parameter
 ) -> AnalysisResult:
     # 1. Load WAV file
     fs_hz, data_normalized, file_hash = load_wav_file(str(file_path))
@@ -155,11 +156,21 @@ def run_full_analysis_pipeline(
     if plugin_name and plugin_params:
         selected_plugin = plugin_manager.get_plugin(plugin_name)
         if selected_plugin:
-            signal_post_nr = selected_plugin.process(
-                signal_pre_nr,
-                fs_hz,
-                **plugin_params
-            )
+            if plugin_name == "spectral_subtraction":
+                if p_noise_avg is None:
+                    raise ValueError("p_noise_avg must be provided for spectral_subtraction plugin.")
+                signal_post_nr = selected_plugin.process(
+                    signal_pre_nr,
+                    fs_hz,
+                    p_noise_avg=p_noise_avg, # Pass the noise profile
+                    **plugin_params
+                )
+            else: # Other plugins
+                signal_post_nr = selected_plugin.process(
+                    signal_pre_nr,
+                    fs_hz,
+                    **plugin_params
+                )
             nr_eval_results = perform_nr_evaluation(signal_pre_nr, signal_post_nr)
             processed_final = signal_post_nr
         else:
@@ -264,7 +275,7 @@ def test_mt_pipeline_integration(normal_wav_files_for_mt, dummy_sine_wav, dummy_
             power_mid=power_bands_dict['mid'],
             power_high=power_bands_dict['high']
         )
-        mt_space.add_normal_sample(normal_features)
+        mt_space.add_normal_sample(normal_features, processed_final, fs_hz, mt_train_config)
 
     assert mt_space.mean_vector is not None
     assert mt_space.inverse_covariance_matrix is not None
@@ -356,3 +367,112 @@ def test_band_stop_filter_pipeline_integration(sine_with_band_noise_wav):
     main_signal_freq = 300.0
     idx_main_orig = np.argmin(np.abs(freqs_temp - main_signal_freq))
     assert np.isclose(magnitude_nr_from_result[idx_main_orig], magnitude_orig[idx_main_orig], rtol=0.2)
+
+# Fixture to create a WAV file with sine wave + broadband noise for spectral subtraction
+@pytest.fixture
+def sine_with_broadband_noise_wav(tmp_path):
+    fs = 44100
+    duration = 2.0
+    t = np.linspace(0., duration, int(fs * duration), endpoint=False)
+    
+    main_signal = 0.5 * np.sin(2 * np.pi * 100 * t) # Main signal
+    
+    np.random.seed(1) # Use a different seed for this noise generation
+    broadband_noise = 0.3 * np.random.randn(len(t)) # Broadband noise component
+
+    data = main_signal + broadband_noise
+    data_int16 = (data / np.max(np.abs(data)) * (np.iinfo(np.int16).max * 0.5)).astype(np.int16)
+
+    file_path = tmp_path / "sine_with_broadband_noise.wav"
+    wavfile.write(file_path, fs, data_int16)
+    return file_path, fs, main_signal, broadband_noise # Return main_signal for verification
+
+def test_spectral_subtraction_pipeline_integration(tmp_path, sine_with_broadband_noise_wav):
+    file_path, fs_hz, main_signal_raw, broadband_noise_raw = sine_with_broadband_noise_wav
+    
+    # 1. Simulate MTSpace training to get noise profile
+    mt_space = MTSpace(min_samples=1)
+    # Use the noisy signal itself as a "normal" sample for noise profile learning for this test
+    # In a real scenario, this would come from actual normal data without the signal of interest
+    # For this test, we'll use a signal that is mostly noise, to simulate learning the noise
+    noise_only_data = broadband_noise_raw # Assuming broadband_noise_raw is representative of noise
+    
+    # We need to process this noise_only_data to get its power spectrum for MTSpace
+    processed_noise_only = remove_dc_offset(noise_only_data)
+    
+    # Mock AnalysisConfig for MTSpace training (needs window function)
+    mt_train_config_for_nr = AnalysisConfig(
+        quantity=SignalQuantity.ACCEL,
+        window=WindowFunction.HANNING,
+        highpass_hz=None, lowpass_hz=None, filter_order=4
+    )
+    
+    # Manually add a dummy features and processed_signal to MTSpace to trigger noise profile learning
+    # This simulates `add_normal_sample` being called during MT training
+    dummy_features = VibrationFeatures(rms=1, peak=1, kurtosis=1, skewness=0, crest_factor=1, shape_factor=1, power_low=0, power_mid=0, power_high=0)
+    mt_space.add_normal_sample(dummy_features, processed_noise_only, fs_hz, mt_train_config_for_nr)
+    
+    assert mt_space.noise_power_spectrum_avg is not None
+
+    # 2. Apply Spectral Subtraction Plugin
+    plugin_name = "spectral_subtraction"
+    plugin_params = {"alpha": 2.0, "floor": 0.01, "post_filter_cutoff_hz": 0.0}
+
+    # Run pipeline with the plugin, passing the learned noise profile
+    analysis_result = run_full_analysis_pipeline(
+        file_path, 
+        fs_hz, 
+        plugin_name, 
+        plugin_params, 
+        p_noise_avg=mt_space.noise_power_spectrum_avg # Pass the learned noise profile
+    )
+
+    # 3. Verify Noise Reduction
+    # Get processed_final signal from the pipeline (requires modification to run_full_analysis_pipeline to return processed_final)
+    # For now, re-run just the processing part to get signals for comparison
+    _, data_normalized, _ = load_wav_file(str(file_path))
+    processed_dc_removed = remove_dc_offset(data_normalized)
+    signal_pre_nr = apply_butterworth_filter(
+        processed_dc_removed, fs_hz, analysis_result.config.highpass_hz, analysis_result.config.lowpass_hz, analysis_result.config.filter_order
+    )
+    
+    selected_plugin = plugin_manager.get_plugin(plugin_name)
+    signal_post_nr = selected_plugin.process(
+        signal_pre_nr,
+        fs_hz,
+        p_noise_avg=mt_space.noise_power_spectrum_avg,
+        **plugin_params
+    )
+    
+    # Assert RMS reduction
+    rms_pre_nr = np.sqrt(np.mean(signal_pre_nr**2))
+    rms_post_nr = np.sqrt(np.mean(signal_post_nr**2))
+    assert rms_post_nr < rms_pre_nr * 0.8 # Expect significant RMS reduction (e.g., at least 20%)
+
+    # Assert broadband noise reduction in frequency domain
+    _, mags_pre, _ = calculate_fft_features(signal_pre_nr, fs_hz, analysis_result.config.window)
+    _, mags_post, _ = calculate_fft_features(signal_post_nr, fs_hz, analysis_result.config.window)
+    freqs_temp, _, _ = calculate_fft_features(signal_pre_nr, fs_hz, analysis_result.config.window)
+
+    # Calculate average power in a broadband range (e.g., 50-200 Hz excluding main signal)
+    def avg_power_in_band(freqs, mags, low, high, exclude_freq=None, exclude_width=5):
+        power_sum = 0
+        count = 0
+        for i, f in enumerate(freqs):
+            if low <= f <= high:
+                if exclude_freq is None or not (exclude_freq - exclude_width <= f <= exclude_freq + exclude_width):
+                    power_sum += mags[i]**2
+                    count += 1
+        return power_sum / count if count > 0 else 0
+
+    broadband_low, broadband_high = 50, 400
+    main_freq_val = 100.0
+    
+    avg_power_pre = avg_power_in_band(freqs_temp, mags_pre, broadband_low, broadband_high, main_freq_val)
+    avg_power_post = avg_power_in_band(freqs_temp, mags_post, broadband_low, broadband_high, main_freq_val)
+
+    assert avg_power_post < avg_power_pre * 0.5 # Expect significant broadband noise reduction (e.g., at least 50%)
+
+    # Assert main signal is largely preserved (e.g., peak at 100 Hz)
+    idx_main_orig = np.argmin(np.abs(freqs_temp - main_freq_val))
+    assert np.isclose(mags_post[idx_main_orig], mags_pre[idx_main_orig], rtol=0.3) # Allow some loss due to aggressive NR

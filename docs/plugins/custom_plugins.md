@@ -154,3 +154,43 @@ class GainPlugin(NoiseReductionPlugin):
         return processed_data
 
 ```
+
+---
+
+## 6. Spectral Subtraction Plugin
+
+The Spectral Subtraction plugin provides a method for reducing broadband noise by estimating a noise profile from normal operating conditions and subtracting its power spectrum from the noisy signal's power spectrum.
+
+### How it Works
+
+1.  **Noise Profile Learning:** When you train the MT (Mahalanobis-Taguchi) method's unit space, the application simultaneously learns an averaged noise power spectrum from the provided normal WAV files. This learned profile represents the characteristic environmental noise.
+2.  **Spectral Subtraction:** When the Spectral Subtraction plugin is selected for analysis, the application takes the input signal, performs a Fast Fourier Transform (FFT) to get its power and phase spectra. It then subtracts the *learned noise power spectrum* (scaled by an `alpha` factor) from the input signal's power spectrum. A spectral floor (`floor`) is applied to prevent negative power values. The resulting "clean" magnitude spectrum is then combined with the original signal's phase spectrum, and an Inverse FFT (IFFT) is performed to reconstruct the noise-reduced time-domain signal.
+3.  **Post-filtering:** Optionally, a low-pass filter can be applied after IFFT to smooth out any residual artifacts.
+
+### Parameters
+
+*   **Alpha (Over-subtraction Factor):** Controls how aggressively the noise is subtracted. A higher value (e.g., 2.0 to 5.0) leads to more noise reduction but can also introduce more signal distortion. Adjust this to find a balance.
+    *   `param_type`: `number_input`
+    *   `default`: `2.0`
+    *   `min_value`: `1.0`
+    *   `max_value`: `5.0`
+*   **Floor (Noise Floor, 0-1):** Sets a minimum power level to prevent negative power values during subtraction. This is often a small fraction of the estimated noise power or the noisy signal's power.
+    *   `param_type`: `number_input`
+    *   `default`: `0.02`
+    *   `min_value`: `0.0`
+    *   `max_value`: `0.5`
+*   **Post-filter LPF (Hz, 0 for None):** Applies a Low-Pass Filter after the Inverse FFT to smooth out any potential "musical noise" or other high-frequency artifacts introduced by the spectral subtraction process. Set to `0` to disable this post-filtering.
+    *   `param_type`: `number_input`
+    *   `default`: `0.0`
+    *   `min_value`: `0.0`
+*   **Post-filter Order:** The order of the Butterworth low-pass filter applied as a post-filter. Higher orders provide a steeper rolloff but can introduce more phase distortion.
+    *   `param_type`: `number_input`
+    *   `default`: `4`
+    *   `min_value`: `1`
+
+### Usage
+
+1.  **Train MT Method:** Before using Spectral Subtraction, ensure you have trained the MT method's unit space by uploading normal WAV files in the sidebar's "MT法設定" section and clicking "単位空間を構築/更新". This step is crucial for learning the `noise_power_spectrum_avg`.
+2.  **Select Plugin:** In the "ノイズ除去プラグイン" section of the sidebar, select "Spectral Subtraction" from the "ノイズ除去アルゴリズム" dropdown.
+3.  **Adjust Parameters:** Configure the Alpha, Floor, and optional Post-filter settings as needed.
+4.  **Analyze:** Upload your evaluation WAV file. The Spectral Subtraction will be applied, and its effect can be reviewed in the "ノイズ除去 評価" section.

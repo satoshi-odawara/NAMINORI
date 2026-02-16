@@ -40,6 +40,16 @@ def get_serializable_audit_log(result: AnalysisResult) -> dict:
     if result.config.noise_reduction_plugin_params:
         log_data['config']['noise_reduction_plugin_params'] = result.config.noise_reduction_plugin_params
 
+    # Add noise profile config for spectral subtraction if available
+    if hasattr(st.session_state.mt_space, 'noise_power_spectrum_avg') and st.session_state.mt_space.noise_power_spectrum_avg is not None:
+        log_data['mt_space_noise_profile_config'] = {
+            "trained": True,
+            "length": len(st.session_state.mt_space.noise_power_spectrum_avg)
+            # Potentially add hash of the noise profile data itself if needed for stricter reproducibility
+        }
+    else:
+        log_data['mt_space_noise_profile_config'] = {"trained": False}
+
     return log_data
 
 
@@ -53,9 +63,17 @@ with st.sidebar.expander("正常データで単位空間を構築"):
     train_lpf = st.number_input("LPF (訓練用)", 0, 22050, 20000, key="train_lpf")
     train_order = st.number_input("フィルタ次数 (訓練用)", 1, 10, 4, key="train_order")
 
+    mt_train_config = AnalysisConfig(
+        quantity=SignalQuantity.ACCEL, # Assuming ACCEL for MT training
+        window=WindowFunction.HANNING, # Assuming HANNING for MT training
+        highpass_hz=float(train_hpf) if train_hpf > 0 else None,
+        lowpass_hz=float(train_lpf) if train_lpf < 22050 else None,
+        filter_order=train_order
+    )
+
     if st.button("単位空間を構築/更新", key="build_mt_space"):
         if normal_files:
-            st.session_state.mt_space = MTSpace()
+            st.session_state.mt_space = MTSpace() # Reset MTSpace
             for i, file in enumerate(normal_files):
                 st.info(f"処理中: {file.name} ({i+1}/{len(normal_files)})")
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_f:
@@ -64,19 +82,19 @@ with st.sidebar.expander("正常データで単位空間を構築"):
                 os.remove(tmp_f.name)
                 
                 processed = remove_dc_offset(data)
-                processed = apply_butterworth_filter(processed, fs, float(train_hpf) if train_hpf > 0 else None, float(train_lpf) if train_lpf > 0 else None, train_order)
+                processed = apply_butterworth_filter(processed, fs, mt_train_config.highpass_hz, mt_train_config.lowpass_hz, mt_train_config.filter_order)
                 # NOTE: For simplicity, noise reduction is not applied to training data in this refactoring.
                 # A more advanced implementation might allow configuring this.
                 
                 time_feats = calculate_time_domain_features(processed)
-                _, _, power_bands_dict = calculate_fft_features(processed, fs, WindowFunction.HANNING)
+                _, _, power_bands_dict = calculate_fft_features(processed, fs, mt_train_config.window) # Use mt_train_config.window
                 
                 st.session_state.mt_space.add_normal_sample(VibrationFeatures(
                     **asdict(time_feats),
                     power_low=power_bands_dict['low'],
                     power_mid=power_bands_dict['mid'],
                     power_high=power_bands_dict['high']
-                ))
+                ), processed, fs, mt_train_config)
             st.success(f"{len(normal_files)}個のファイルで単位空間を構築/更新しました。")
 
 st.sidebar.info(f"単位空間ステータス: {st.session_state.mt_space.get_status()}")
@@ -195,13 +213,31 @@ if uploaded_file:
         nr_eval_results = None
         # Apply noise reduction plugin if selected and perform evaluation
         if selected_plugin and config.noise_reduction_plugin_params is not None:
-            signal_post_nr = selected_plugin.process(
-                signal_pre_nr,
-                fs_hz,
-                **config.noise_reduction_plugin_params
-            )
-            nr_eval_results = perform_nr_evaluation(signal_pre_nr, signal_post_nr)
-            processed = signal_post_nr
+            if selected_plugin.get_name() == "spectral_subtraction":
+                if st.session_state.mt_space.noise_power_spectrum_avg is None:
+                    st.warning("Spectral Subtractionを使用するには、まずMT法設定で単位空間を構築し、ノイズプロファイルを学習させてください。")
+                    processed = signal_pre_nr # Skip applying plugin
+                    # Note: We intentionally don't set selected_plugin to None here so audit log can still show what was *attempted*
+                    # However, this means `config.noise_reduction_plugin_name` remains "spectral_subtraction" in audit log.
+                    # For a truly accurate audit log, `config` might need to be modified here or a separate status recorded.
+                else:
+                    # Pass the learned noise power spectrum to the plugin
+                    signal_post_nr = selected_plugin.process(
+                        signal_pre_nr,
+                        fs_hz,
+                        p_noise_avg=st.session_state.mt_space.noise_power_spectrum_avg,
+                        **config.noise_reduction_plugin_params
+                    )
+                    nr_eval_results = perform_nr_evaluation(signal_pre_nr, signal_post_nr)
+                    processed = signal_post_nr
+            else: # Other plugins
+                signal_post_nr = selected_plugin.process(
+                    signal_pre_nr,
+                    fs_hz,
+                    **config.noise_reduction_plugin_params
+                )
+                nr_eval_results = perform_nr_evaluation(signal_pre_nr, signal_post_nr)
+                processed = signal_post_nr
         else:
             processed = signal_pre_nr
 
@@ -219,7 +255,6 @@ if uploaded_file:
             st.metric(f"RMS ({unit})", f"{time_features.rms:.3f}")
             st.metric(f"Peak ({unit})", f"{time_features.peak:.3f}")
             st.metric("Kurtosis", f"{time_features.kurtosis:.3f}")
-            st.metric("Crest Factor", f"{time_features.crest_factor:.3f}")
             
             st.subheader("データ品質")
             st.metric("クリッピング率", f"{quality.clipping_ratio:.2%}")

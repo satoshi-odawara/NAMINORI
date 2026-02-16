@@ -9,6 +9,7 @@ from src.core import signal_processing
 from src.core.plugins import PluginParameter
 from src.plugins.noise_reduction.notch_filter import NotchFilterPlugin
 from src.plugins.noise_reduction.band_stop_filter import BandStopFilterPlugin
+from src.plugins.noise_reduction.spectral_subtraction_plugin import SpectralSubtractionPlugin
 
 
 # Helper function to create a dummy WAV file for testing
@@ -248,3 +249,106 @@ def test_band_stop_filter_plugin_process_invalid_params(dummy_nr_signal):
         plugin.process(data, fs, low_hz=100.0, high_hz=nyquist, order=4) # high_hz >= Nyquist
     with pytest.raises(ValueError, match="Band-stop frequencies .* must be between 0 and Nyquist"):
         plugin.process(data, fs, low_hz=150.0, high_hz=100.0, order=4) # low_hz >= high_hz
+
+
+# --- SpectralSubtractionPlugin Tests ---
+
+@pytest.fixture
+def dummy_spectral_subtraction_signal():
+    fs = 1000  # Hz
+    duration = 1.0  # seconds
+    t = np.linspace(0.0, duration, int(fs * duration), endpoint=False)
+    
+    main_freq = 100.0
+    main_signal = 1.0 * np.sin(2 * np.pi * main_freq * t)
+    
+    np.random.seed(0) # For reproducibility
+    noise_amplitude = 0.5
+    broadband_noise = noise_amplitude * np.random.randn(len(t))
+    
+    noisy_signal = main_signal + broadband_noise
+    return noisy_signal, fs, main_freq, noise_amplitude
+
+@pytest.fixture
+def dummy_noise_power_spectrum(dummy_spectral_subtraction_signal):
+    noisy_signal, fs, _, noise_amplitude = dummy_spectral_subtraction_signal
+    N = len(noisy_signal)
+    
+    # Simulate a learned noise power spectrum
+    # For a simple white noise, the power spectrum should be relatively flat
+    # We create a power spectrum that reflects the 'noise_amplitude'
+    
+    # Take FFT of just noise, then get power spectrum
+    np.random.seed(0) # Same seed as dummy_spectral_subtraction_signal for consistency
+    noise_only_signal = noise_amplitude * np.random.randn(N)
+    noise_fft = np.fft.fft(noise_only_signal)
+    p_noise_avg = np.abs(noise_fft)**2
+    
+    # A simple smoothing might be applied in real scenarios, but for unit test, this is fine
+    return p_noise_avg
+
+
+def test_spectral_subtraction_plugin_metadata():
+    plugin = SpectralSubtractionPlugin()
+    assert plugin.get_name() == "spectral_subtraction"
+    assert plugin.get_display_name() == "Spectral Subtraction"
+    params = plugin.get_parameters()
+    assert len(params) == 4
+    assert params[0].name == "alpha"
+    assert params[1].name == "floor"
+    assert params[2].name == "post_filter_cutoff_hz"
+    assert params[3].name == "post_filter_order"
+
+def test_spectral_subtraction_plugin_process_functionality(dummy_spectral_subtraction_signal, dummy_noise_power_spectrum):
+    data, fs, main_freq, noise_amplitude = dummy_spectral_subtraction_signal
+    p_noise_avg = dummy_noise_power_spectrum
+    
+    plugin = SpectralSubtractionPlugin()
+    
+    # Test default parameters
+    filtered_data_default = plugin.process(data, fs, p_noise_avg)
+    
+    # Verify noise reduction
+    # Check RMS reduction (assuming noise reduction should lower overall RMS)
+    rms_original = np.sqrt(np.mean(data**2))
+    rms_filtered_default = np.sqrt(np.mean(filtered_data_default**2))
+    assert rms_filtered_default < rms_original * 0.9 # Expect at least 10% RMS reduction
+
+    # Check that main signal is preserved
+    fft_orig = np.fft.fft(data)
+    fft_filtered = np.fft.fft(filtered_data_default)
+    freqs = np.fft.fftfreq(len(data), d=1/fs)
+    
+    idx_main_freq = np.argmin(np.abs(freqs - main_freq))
+    # Main frequency component should be largely preserved (within 20% tolerance)
+    np.testing.assert_allclose(np.abs(fft_filtered[idx_main_freq]), np.abs(fft_orig[idx_main_freq]), rtol=0.2)
+    
+    # Test with aggressive alpha
+    filtered_data_aggressive = plugin.process(data, fs, p_noise_avg, alpha=5.0)
+    rms_filtered_aggressive = np.sqrt(np.mean(filtered_data_aggressive**2))
+    assert rms_filtered_aggressive < rms_filtered_default # More aggressive should lead to lower RMS
+
+    # Test with post-filter
+    filtered_data_post_filter = plugin.process(data, fs, p_noise_avg, post_filter_cutoff_hz=150.0, post_filter_order=2)
+    fft_post_filter = np.fft.fft(filtered_data_post_filter)
+    
+    # Verify high frequencies are attenuated by post-filter
+    idx_high_freq = np.argmin(np.abs(freqs - 400.0)) # A frequency clearly above post_filter_cutoff_hz
+    assert np.abs(fft_post_filter[idx_high_freq]) < np.abs(fft_filtered[idx_high_freq]) * 0.5 # Should be lower by at least 50%
+
+def test_spectral_subtraction_plugin_process_invalid_params(dummy_spectral_subtraction_signal):
+    data, fs, *_ = dummy_spectral_subtraction_signal
+    plugin = SpectralSubtractionPlugin()
+    
+    # p_noise_avg is None
+    with pytest.raises(ValueError, match="Averaged noise power spectrum"):
+        plugin.process(data, fs, p_noise_avg=None)
+    
+    # p_noise_avg length mismatch
+    with pytest.warns(UserWarning, match="p_noise_avg length .* does not match data length"):
+         plugin.process(data, fs, p_noise_avg=np.zeros(len(data)//2))
+
+    # Invalid post-filter cutoff
+    with pytest.raises(ValueError, match=rf"Post-filter cutoff frequency \((\d+\.\d+) Hz\) must be between 0 and Nyquist frequency \({fs / 2} Hz\)\."):
+        plugin.process(data, fs, p_noise_avg=np.zeros(len(data)), post_filter_cutoff_hz=fs/2 + 1) # Out of bounds
+

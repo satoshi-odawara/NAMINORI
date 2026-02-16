@@ -12,6 +12,7 @@ from src.core.feature_extraction import calculate_time_domain_features, calculat
 from src.core.quality_check import calculate_quality_metrics
 from src.core.plugins import plugin_manager
 from src.core.evaluation import NoiseReductionEvaluation, perform_nr_evaluation
+from src.diagnostics.mt_method import MTSpace # Added import for MTSpace
 from src.utils.audit_log import AnalysisResult
 from scipy import signal
 
@@ -74,7 +75,8 @@ def sine_with_band_noise_wav_for_regression(tmp_path):
 def get_current_analysis_result_with_plugin(
     wav_file_path: str, 
     plugin_name: Optional[str] = None, 
-    plugin_params: Optional[Dict[str, Any]] = None
+    plugin_params: Optional[Dict[str, Any]] = None,
+    p_noise_avg: Optional[np.ndarray] = None # New parameter for spectral subtraction
 ) -> Dict[str, Any]:
     """
     Helper function to run the full analysis using the plugin system
@@ -104,11 +106,21 @@ def get_current_analysis_result_with_plugin(
     if plugin_name and plugin_params:
         selected_plugin = plugin_manager.get_plugin(plugin_name)
         if selected_plugin:
-            signal_post_nr = selected_plugin.process(
-                signal_pre_nr,
-                fs_hz,
-                **plugin_params
-            )
+            if plugin_name == "spectral_subtraction":
+                if p_noise_avg is None:
+                    raise ValueError("p_noise_avg must be provided for spectral_subtraction plugin.")
+                signal_post_nr = selected_plugin.process(
+                    signal_pre_nr,
+                    fs_hz,
+                    p_noise_avg=p_noise_avg, # Pass the noise profile
+                    **plugin_params
+                )
+            else:
+                signal_post_nr = selected_plugin.process(
+                    signal_pre_nr,
+                    fs_hz,
+                    **plugin_params
+                )
             nr_eval_results = perform_nr_evaluation(signal_pre_nr, signal_post_nr)
             processed_final = signal_post_nr
         else:
@@ -214,5 +226,54 @@ def test_band_stop_filter_plugin_regression(sine_with_band_noise_wav_for_regress
 
     current_result = get_current_analysis_result_with_plugin(
         str(wav_file_path), plugin_name, plugin_params
+    )
+    _run_regression_test(current_result, golden_data_path)
+
+# Fixture for a sine wave with broadband noise for spectral subtraction regression
+@pytest.fixture
+def sine_with_broadband_noise_wav_for_regression(tmp_path):
+    np.random.seed(1) # Ensure deterministic noise (different seed from others to avoid collision)
+    fs = 44100
+    duration = 2.0
+    t = np.linspace(0., duration, int(fs * duration), endpoint=False)
+    
+    main_signal = 0.5 * np.sin(2 * np.pi * 100 * t) # Main signal
+    broadband_noise = 0.3 * np.random.randn(len(t)) # Broadband noise component
+
+    data = main_signal + broadband_noise
+    data_int16 = (data / np.max(np.abs(data)) * (np.iinfo(np.int16).max * 0.5)).astype(np.int16)
+
+    file_path = tmp_path / "sine_with_broadband_noise_regression.wav"
+    wavfile.write(file_path, fs, data_int16)
+    return file_path
+
+# Test for Spectral Subtraction Plugin
+def test_spectral_subtraction_regression(sine_with_broadband_noise_wav_for_regression):
+    golden_data_path = "tests/golden_data/spectral_subtraction_plugin_result.json"
+    wav_file_path = sine_with_broadband_noise_wav_for_regression
+    
+    fs_hz, _, _ = load_wav_file(str(wav_file_path))
+    N = int(fs_hz * 2.0) # Data length used for fixture (2 seconds)
+    
+    # Simulate a learned noise power spectrum (flat for white noise)
+    # This P_noise_avg must match the expected output length of FFT from a signal of length N
+    # For a purely random broadband noise, its power spectrum would be relatively flat.
+    # We create a constant power spectrum for simplicity in this test.
+    mock_noise_amplitude = 0.3 # Matches broadband_noise amplitude in fixture
+    mock_noise_power_avg = np.full(N, (mock_noise_amplitude**2) * N / 2) # Simplified flat power spectrum
+                                                                          # This is a rough approximation, actual value depends on exact FFT scaling
+    
+    # Create a mock MTSpace and set its noise_power_spectrum_avg
+    mock_mt_space = MTSpace()
+    mock_mt_space.noise_power_spectrum_avg = mock_noise_power_avg
+    
+    # Need to pass this mock_mt_space or its noise_power_spectrum_avg to get_current_analysis_result_with_plugin
+    # This implies modifying run_full_analysis_pipeline to accept p_noise_avg as a direct arg
+    
+    plugin_name = "spectral_subtraction"
+    plugin_params = {"alpha": 2.0, "floor": 0.01, "post_filter_cutoff_hz": 0.0}
+
+    current_result = get_current_analysis_result_with_plugin(
+        str(wav_file_path), plugin_name, plugin_params, p_noise_avg=mock_mt_space.noise_power_spectrum_avg
     )
     _run_regression_test(current_result, golden_data_path)

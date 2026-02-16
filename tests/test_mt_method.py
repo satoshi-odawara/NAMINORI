@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from src.diagnostics.mt_method import MTSpace
-from src.core.models import VibrationFeatures
+from src.core.models import VibrationFeatures, AnalysisConfig, SignalQuantity, WindowFunction, AnalysisConfig, SignalQuantity, WindowFunction # Added for mocking signal params
 
 # Helper function to create dummy VibrationFeatures
 def create_vibration_features(
@@ -27,6 +27,17 @@ def create_vibration_features(
         power_high=power_high
     )
 
+@pytest.fixture
+def mock_signal_params():
+    fs = 1000
+    dummy_signal = np.random.rand(fs)
+    config = AnalysisConfig(
+        quantity=SignalQuantity.ACCEL,
+        window=WindowFunction.HANNING,
+        highpass_hz=None, lowpass_hz=None, filter_order=4
+    )
+    return dummy_signal, fs, config
+
 def test_mtspace_initialization():
     mt_space = MTSpace(min_samples=5, recommended_samples=10)
     assert mt_space.min_samples == 5
@@ -36,12 +47,13 @@ def test_mtspace_initialization():
     assert mt_space.inverse_covariance_matrix is None
     assert mt_space.is_provisional is True
 
-def test_add_normal_sample_insufficient():
+def test_add_normal_sample_insufficient(mock_signal_params):
     mt_space = MTSpace(min_samples=3, recommended_samples=5)
+    dummy_signal, fs, config = mock_signal_params
     
     # Add 2 samples (insufficient for min_samples=3)
-    mt_space.add_normal_sample(create_vibration_features(rms=1.1, peak=2.1))
-    mt_space.add_normal_sample(create_vibration_features(rms=1.2, peak=2.2))
+    mt_space.add_normal_sample(create_vibration_features(rms=1.1, peak=2.1), dummy_signal, fs, config)
+    mt_space.add_normal_sample(create_vibration_features(rms=1.2, peak=2.2), dummy_signal, fs, config)
 
     assert len(mt_space.normal_samples_vectors) == 2
     assert mt_space.mean_vector is None
@@ -49,13 +61,14 @@ def test_add_normal_sample_insufficient():
     assert mt_space.is_provisional is True
     assert mt_space.get_status() == "Insufficient samples (2/3 min)"
 
-def test_add_normal_sample_sufficient_provisional():
+def test_add_normal_sample_sufficient_provisional(mock_signal_params):
     mt_space = MTSpace(min_samples=3, recommended_samples=5)
+    dummy_signal, fs, config = mock_signal_params
 
     # Add 3 samples (sufficient for min_samples=3, but provisional for recommended_samples=5)
-    mt_space.add_normal_sample(create_vibration_features(rms=1.1, peak=2.1, power_low=0.6))
-    mt_space.add_normal_sample(create_vibration_features(rms=1.2, peak=2.2, power_low=0.7))
-    mt_space.add_normal_sample(create_vibration_features(rms=1.3, peak=2.3, power_low=0.8))
+    mt_space.add_normal_sample(create_vibration_features(rms=1.1, peak=2.1, power_low=0.6), dummy_signal, fs, config)
+    mt_space.add_normal_sample(create_vibration_features(rms=1.2, peak=2.2, power_low=0.7), dummy_signal, fs, config)
+    mt_space.add_normal_sample(create_vibration_features(rms=1.3, peak=2.3, power_low=0.8), dummy_signal, fs, config)
 
     assert len(mt_space.normal_samples_vectors) == 3
     assert mt_space.mean_vector is not None
@@ -67,13 +80,14 @@ def test_add_normal_sample_sufficient_provisional():
     expected_mean_rms = np.mean([1.1, 1.2, 1.3])
     np.testing.assert_allclose(mt_space.mean_vector[0], expected_mean_rms, rtol=1e-3)
 
-def test_add_normal_sample_established():
+def test_add_normal_sample_established(mock_signal_params):
     mt_space = MTSpace(min_samples=3, recommended_samples=3) # Set recommended_samples to min for easier test
+    dummy_signal, fs, config = mock_signal_params
 
     # Add 3 samples (sufficient for min_samples=3 and recommended_samples=3)
-    mt_space.add_normal_sample(create_vibration_features(rms=1.1, peak=2.1, power_low=0.6))
-    mt_space.add_normal_sample(create_vibration_features(rms=1.2, peak=2.2, power_low=0.7))
-    mt_space.add_normal_sample(create_vibration_features(rms=1.3, peak=2.3, power_low=0.8))
+    mt_space.add_normal_sample(create_vibration_features(rms=1.1, peak=2.1, power_low=0.6), dummy_signal, fs, config)
+    mt_space.add_normal_sample(create_vibration_features(rms=1.2, peak=2.2, power_low=0.7), dummy_signal, fs, config)
+    mt_space.add_normal_sample(create_vibration_features(rms=1.3, peak=2.3, power_low=0.8), dummy_signal, fs, config)
 
     assert len(mt_space.normal_samples_vectors) == 3
     assert mt_space.mean_vector is not None
@@ -87,41 +101,44 @@ def test_calculate_md_no_unit_space():
     md = mt_space.calculate_md(features)
     assert md == np.inf
 
-def test_calculate_md_normal_sample():
+def test_calculate_md_normal_sample(mock_signal_params):
     mt_space = MTSpace(min_samples=3, recommended_samples=3)
+    dummy_signal, fs, config = mock_signal_params
     normal_features = [
         create_vibration_features(rms=1.0, peak=2.0),
         create_vibration_features(rms=1.1, peak=2.1),
         create_vibration_features(rms=0.9, peak=1.9)
     ]
     for f in normal_features:
-        mt_space.add_normal_sample(f)
+        mt_space.add_normal_sample(f, dummy_signal, fs, config)
     
     # Calculate MD for one of the normal samples (should be close to 0)
     md = mt_space.calculate_md(normal_features[0])
     np.testing.assert_allclose(md, 0.0, atol=1e-6) # MD for a point in its own space is 0
 
-def test_calculate_md_anomalous_sample():
+def test_calculate_md_anomalous_sample(mock_signal_params):
     mt_space = MTSpace(min_samples=3, recommended_samples=3)
+    dummy_signal, fs, config = mock_signal_params
     normal_features = [
         create_vibration_features(rms=1.0, peak=2.0, power_low=0.5),
         create_vibration_features(rms=1.1, peak=2.1, power_low=0.55),
         create_vibration_features(rms=0.9, peak=1.9, power_low=0.45)
     ]
     for f in normal_features:
-        mt_space.add_normal_sample(f)
+        mt_space.add_normal_sample(f, dummy_signal, fs, config)
 
     # Create an anomalous sample (significantly different RMS)
     anomalous_features = create_vibration_features(rms=10.0, peak=20.0, power_low=0.1)
     md = mt_space.calculate_md(anomalous_features)
     assert md > 5.0 # Expect a significantly higher MD for anomaly
 
-def test_singular_covariance_matrix_regularization():
+def test_singular_covariance_matrix_regularization(mock_signal_params):
     mt_space = MTSpace(min_samples=3, recommended_samples=3)
+    dummy_signal, fs, config = mock_signal_params
     # Create samples with very low variance in some dimensions to trigger singularity
-    mt_space.add_normal_sample(create_vibration_features(rms=1.0, peak=2.0, kurtosis=0.5, skewness=0.1, crest_factor=2.0, shape_factor=1.5, power_low=0.5, power_mid=0.3, power_high=0.2))
-    mt_space.add_normal_sample(create_vibration_features(rms=1.000001, peak=2.0, kurtosis=0.5, skewness=0.1, crest_factor=2.0, shape_factor=1.5, power_low=0.5, power_mid=0.3, power_high=0.2))
-    mt_space.add_normal_sample(create_vibration_features(rms=1.000002, peak=2.0, kurtosis=0.5, skewness=0.1, crest_factor=2.0, shape_factor=1.5, power_low=0.5, power_mid=0.3, power_high=0.2))
+    mt_space.add_normal_sample(create_vibration_features(rms=1.0, peak=2.0, kurtosis=0.5, skewness=0.1, crest_factor=2.0, shape_factor=1.5, power_low=0.5, power_mid=0.3, power_high=0.2), dummy_signal, fs, config)
+    mt_space.add_normal_sample(create_vibration_features(rms=1.000001, peak=2.0, kurtosis=0.5, skewness=0.1, crest_factor=2.0, shape_factor=1.5, power_low=0.5, power_mid=0.3, power_high=0.2), dummy_signal, fs, config)
+    mt_space.add_normal_sample(create_vibration_features(rms=1.000002, peak=2.0, kurtosis=0.5, skewness=0.1, crest_factor=2.0, shape_factor=1.5, power_low=0.5, power_mid=0.3, power_high=0.2), dummy_signal, fs, config)
 
     # Should not raise LinAlgError
     assert mt_space.mean_vector is not None
