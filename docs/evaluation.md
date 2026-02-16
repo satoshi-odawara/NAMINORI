@@ -94,3 +94,34 @@ After a benchmark run, the application displays a comprehensive summary:
 *   **ファイルごとの詳細結果:** An expandable section (table) showing results for each individual test file, including its actual label, predicted label, Mahalanobis Distance, and detailed analysis/NR evaluation results.
 
 These metrics allow users to quantitatively compare the effectiveness of different algorithm configurations and noise reduction strategies on a standardized dataset.
+
+### 4.3 Custom and Synthetic Benchmarking Datasets
+
+To use your own custom or synthetic datasets for benchmarking, ensure they follow a specific directory structure. This structure allows the application to correctly identify training (normal) and test (normal/anomaly) files.
+
+The expected structure within your custom dataset's root directory should be:
+
+```
+your_custom_dataset_name/
+├── train/
+│   └── normal/
+│       ├── normal_train_01.wav
+│       ├── normal_train_02.wav
+│       └── ...
+├── test/
+│   ├── normal/
+│   │   ├── normal_test_01.wav
+│   │   ├── normal_test_02.wav
+│   │   └── ...
+│   └── anomaly/
+│       ├── anomaly_test_01.wav
+│       ├── anomaly_test_02.wav
+│       └── ...
+```
+
+*   **`your_custom_dataset_name/`**: This is the root directory for your dataset. When selecting a dataset in the UI, you would point to this directory (or one of its parent directories if the UI provides a full path selector).
+*   **`train/normal/`**: Contains WAV files representing *normal* operating conditions, used for training the MT space and learning noise profiles (if applicable).
+*   **`test/normal/`**: Contains WAV files representing *normal* operating conditions, used as part of the test set for evaluation.
+*   **`test/anomaly/`**: Contains WAV files representing *anomalous* operating conditions, used as part of the test set for evaluation.
+
+All WAV files should be mono, 16-bit PCM, and have a consistent sampling rate within a given dataset. Adhering to this structure ensures that the benchmarking framework can correctly process and evaluate your custom data.
