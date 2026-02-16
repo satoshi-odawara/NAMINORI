@@ -97,6 +97,7 @@ All initial development phases, including core backend refactoring, MT method im
 5.  **[QA/Expert] Add Unit/Integration Tests for Benchmarking (`ISSUE-047`):** COMPLETED
 6.  **[QA/Expert] Add Regression Tests for Benchmarking Results (`ISSUE-048`):** COMPLETED
 7.  **[Documentation] Document Benchmarking Feature (`ISSUE-049`):** COMPLETED
+8.  **[Architect] Define Standard Directory Structure for Self-Generated/Synthetic Benchmarking Datasets (`ISSUE-050`):** COMPLETED
 
 ---
 
@@ -108,7 +109,11 @@ All initial development phases, including core backend refactoring, MT method im
 
 **Tasks:**
 
-1.  **[Architect] Integrate DCASE 2020 Challenge Task 2 for Benchmarking (`ISSUE-051`):** NOT STARTED
+1.  **[Architect] Integrate DCASE 2020 Challenge Task 2 for Benchmarking (`ISSUE-051`):** IN PROGRESS
+    *   **[Architect] Subtask 1: Design DCASE Data Preparation/Transformation Strategy.** (Completed: Transform DCASE data into `dataset_root/<machine_id>/train/normal`, `dataset_root/<machine_id>/test/normal`, `dataset_root/<machine_id>/test/anomaly` structure.)
+    *   **[Developer] Subtask 2: Implement a Python script to download and pre-process the DCASE 2020 "pump" development dataset.** This script will restructure the data as designed.
+    *   **[Developer] Subtask 3: Modify `run_benchmark_test` in `benchmarking.py` to recursively find and run benchmarks for all machine ID subdirectories within the given `dataset_root` if such subdirectories exist.**
+    *   **[QA/Expert] Subtask 4: Add unit/integration tests for DCASE data handling and benchmark execution.**
 2.  **[Developer] Enhance Synthetic Data Generation for Complex Scenarios (`ISSUE-052`):** NOT STARTED
 3.  **[QA/Expert] Benchmark MT Method Robustness with Varied Noise Levels and Types (`ISSUE-053`):** NOT STARTED
 4.  **[Architect] Explore and Integrate Advanced Feature Extraction Techniques (`ISSUE-054`):** NOT STARTED

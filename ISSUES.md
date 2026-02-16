@@ -50,7 +50,7 @@
 - [x] ISSUE-048: [QA/Expert] Add Regression Tests for Benchmarking Results [CLOSED]
 - [x] ISSUE-049: [Documentation] Document Benchmarking Feature [CLOSED]
 - [x] ISSUE-050: [Architect] Define Standard Directory Structure for Self-Generated/Synthetic Benchmarking Datasets [CLOSED]
-- [ ] ISSUE-051: [Architect] Integrate DCASE 2020 Challenge Task 2 for Benchmarking [OPEN]
+- [ ] ISSUE-051: [Architect] Integrate DCASE 2020 Challenge Task 2 for Benchmarking [IN PROGRESS]
 - [ ] ISSUE-052: [Developer] Enhance Synthetic Data Generation for Complex Scenarios [OPEN]
 - [ ] ISSUE-053: [QA/Expert] Benchmark MT Method Robustness with Varied Noise Levels and Types [OPEN]
 - [ ] ISSUE-054: [Architect] Explore and Integrate Advanced Feature Extraction Techniques [OPEN]
