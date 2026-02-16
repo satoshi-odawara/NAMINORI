@@ -8,5 +8,5 @@ This documentation aims to provide comprehensive guides for users, developers, a
 
 *   [User Guide](user_guide.md)
 *   [Plugin Development Guide](plugins/custom_plugins.md)
-*   [Noise Reduction Evaluation Framework](evaluation.md)
+*   [Evaluation and Benchmarking Framework](evaluation.md)
 *   [Technical Architecture Overview](architecture.md)

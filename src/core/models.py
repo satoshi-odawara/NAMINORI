@@ -82,3 +82,16 @@ class AnalysisResult:
     file_hash: str
     fs_hz: float
     app_version: str = "1.0.0"
+
+@dataclass
+class MTConfig:
+    anomaly_threshold: float = 3.0
+    min_samples: int = 10
+    recommended_samples: int = 30
+
+@dataclass
+class BenchmarkConfig:
+    dataset_name: str
+    analysis_config: AnalysisConfig
+    mt_config: MTConfig
+    nr_plugin_config: Optional[dict] = None # {"name": "plugin_name", "params": {...}}

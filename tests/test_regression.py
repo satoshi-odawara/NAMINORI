@@ -15,6 +15,8 @@ from src.core.evaluation import NoiseReductionEvaluation, perform_nr_evaluation
 from src.diagnostics.mt_method import MTSpace # Added import for MTSpace
 from src.utils.audit_log import AnalysisResult
 from scipy import signal
+from src.core.benchmarking import BenchmarkConfig, MTConfig, run_benchmark_test, BenchmarkResult, FileBenchmarkResult # New imports
+from pathlib import Path # New import
 
 # Ensure plugins are loaded for tests
 plugin_manager.load_plugins()
@@ -70,6 +72,61 @@ def sine_with_band_noise_wav_for_regression(tmp_path):
     file_path = tmp_path / "sine_with_band_noise_regression.wav"
     wavfile.write(file_path, fs, data_int16)
     return file_path
+
+# Fixture for a sine wave with broadband noise for spectral subtraction regression
+@pytest.fixture
+def sine_with_broadband_noise_wav_for_regression(tmp_path):
+    np.random.seed(1) # Ensure deterministic noise (different seed from others to avoid collision)
+    fs = 44100
+    duration = 2.0
+    t = np.linspace(0., duration, int(fs * duration), endpoint=False)
+    
+    main_signal = 0.5 * np.sin(2 * np.pi * 100 * t) # Main signal
+    broadband_noise = 0.3 * np.random.randn(len(t)) # Broadband noise component
+
+    data = main_signal + broadband_noise
+    data_int16 = (data / np.max(np.abs(data)) * (np.iinfo(np.int16).max * 0.5)).astype(np.int16)
+
+    file_path = tmp_path / "sine_with_broadband_noise_regression.wav"
+    wavfile.write(file_path, fs, data_int16)
+    return file_path
+
+# Fixture for a dummy benchmark dataset for regression
+@pytest.fixture
+def dummy_regression_benchmark_dataset(tmp_path):
+    """
+    Creates a dummy benchmark dataset structure for regression tests.
+    - train/normal (2 files)
+    - test/normal (1 file)
+    - test/anomaly (1 file)
+    """
+    np.random.seed(2) # Separate seed for benchmark data
+    dataset_root = tmp_path / "regression_benchmark_data"
+    (dataset_root / "train" / "normal").mkdir(parents=True)
+    (dataset_root / "test" / "normal").mkdir(parents=True)
+    (dataset_root / "test" / "anomaly").mkdir(parents=True)
+
+    fs = 44100
+    duration = 1.0
+    
+    # Train normal files
+    for i in range(2):
+        t = np.linspace(0., duration, int(fs * duration), endpoint=False)
+        data = 0.5 * np.sin(2 * np.pi * (100 + i*50) * t) + 0.05 * np.random.randn(len(t))
+        wavfile.write(dataset_root / "train" / "normal" / f"train_normal_{i}.wav", fs, (data * (np.iinfo(np.int16).max * 0.5)).astype(np.int16))
+
+    # Test normal file
+    t = np.linspace(0., duration, int(fs * duration), endpoint=False)
+    data_normal = 0.5 * np.sin(2 * np.pi * 100 * t) + 0.05 * np.random.randn(len(t))
+    wavfile.write(dataset_root / "test" / "normal" / "test_normal_0.wav", fs, (data_normal * (np.iinfo(np.int16).max * 0.5)).astype(np.int16))
+
+    # Test anomaly file (higher frequency or more noise)
+    t = np.linspace(0., duration, int(fs * duration), endpoint=False)
+    data_anomaly = 0.5 * np.sin(2 * np.pi * 500 * t) + 0.2 * np.random.randn(len(t))
+    wavfile.write(dataset_root / "test" / "anomaly" / "test_anomaly_0.wav", fs, (data_anomaly * (np.iinfo(np.int16).max * 0.5)).astype(np.int16))
+    
+    return dataset_root
+
 
 # Helper to run the analysis pipeline with a specified plugin
 def get_current_analysis_result_with_plugin(
@@ -200,6 +257,68 @@ def _run_regression_test(current_result: Dict[str, Any], golden_data_path: str):
                 assert current_result['config'][config_key] == golden_result['config'][config_key], \
                     f"Config parameter '{config_key}' regression failed"
 
+def _run_benchmark_regression_test(current_benchmark_result: BenchmarkResult, golden_data_path: str):
+    """
+    Helper function to compare BenchmarkResult against golden data.
+    """
+    current_dict = asdict(current_benchmark_result)
+    current_dict.pop('timestamp', None) # Timestamp changes on every run
+
+    # Convert enum values to strings for JSON serialization
+    current_dict['benchmark_config']['analysis_config']['quantity'] = current_benchmark_result.benchmark_config.analysis_config.quantity.value
+    current_dict['benchmark_config']['analysis_config']['window'] = current_benchmark_result.benchmark_config.analysis_config.window.value
+
+    for file_res in current_dict['file_results']:
+        file_res.pop('file_path', None) # File path depends on tmp_path
+        file_res['analysis_result']['features'] = asdict(VibrationFeatures(**file_res['analysis_result']['features']))
+
+        if file_res['nr_evaluation']:
+            file_res['nr_evaluation']['features_before'] = asdict(VibrationFeatures(**file_res['nr_evaluation']['features_before']))
+            file_res['nr_evaluation']['features_after'] = asdict(VibrationFeatures(**file_res['nr_evaluation']['features_after']))
+    
+    if not os.path.exists(golden_data_path):
+        os.makedirs(os.path.dirname(golden_data_path), exist_ok=True)
+        with open(golden_data_path, "w") as f:
+            json.dump(current_dict, f, indent=2, sort_keys=True)
+        pytest.fail(f"Golden data file '{golden_data_path}' created. Please review and re-run tests for regression check.")
+    else:
+        with open(golden_data_path, "r") as f:
+            golden_dict = json.load(f)
+
+        # Compare overall metrics
+        assert np.isclose(current_dict['accuracy'], golden_dict['accuracy'], rtol=1e-5, atol=1e-8), "Benchmark accuracy regression failed"
+        assert np.isclose(current_dict['precision'], golden_dict['precision'], rtol=1e-5, atol=1e-8), "Benchmark precision regression failed"
+        assert np.isclose(current_dict['recall'], golden_dict['recall'], rtol=1e-5, atol=1e-8), "Benchmark recall regression failed"
+        assert np.isclose(current_dict['f1_score'], golden_dict['f1_score'], rtol=1e-5, atol=1e-8), "Benchmark F1 score regression failed"
+        assert np.isclose(current_dict['avg_processing_time_ms'], golden_dict['avg_processing_time_ms'], rtol=1e-2), "Benchmark avg processing time regression failed" # Looser tolerance for time
+
+        # Compare NR performance metrics if present
+        if current_dict['nr_performance_metrics'] and golden_dict['nr_performance_metrics']:
+            for key, value in current_dict['nr_performance_metrics'].items():
+                assert np.isclose(value, golden_dict['nr_performance_metrics'][key], rtol=1e-5, atol=1e-8), f"NR performance metric '{key}' regression failed"
+
+        # Compare per-file results
+        assert len(current_dict['file_results']) == len(golden_dict['file_results']), "Number of benchmark file results mismatch"
+        for i in range(len(current_dict['file_results'])):
+            current_file_res = current_dict['file_results'][i]
+            golden_file_res = golden_dict['file_results'][i]
+
+            assert current_file_res['actual_label'] == golden_file_res['actual_label']
+            assert current_file_res['predicted_label'] == golden_file_res['predicted_label']
+            assert np.isclose(current_file_res['mahalanobis_distance'], golden_file_res['mahalanobis_distance'], rtol=1e-5, atol=1e-8)
+
+            # Compare features within analysis_result
+            for key, value in current_file_res['analysis_result']['features'].items():
+                assert np.isclose(value, golden_file_res['analysis_result']['features'][key], rtol=1e-5, atol=1e-8), \
+                    f"File result {i} feature '{key}' regression failed"
+
+            # Compare NR evaluation if present
+            if current_file_res['nr_evaluation'] and golden_file_res['nr_evaluation']:
+                for stage in ['features_before', 'features_after']:
+                    for key, value in current_file_res['nr_evaluation'][stage].items():
+                        assert np.isclose(value, golden_file_res['nr_evaluation'][stage][key], rtol=1e-5, atol=1e-8), \
+                            f"File result {i} NR Evaluation {stage} feature '{key}' regression failed"
+
 
 # --- Regression Tests ---
 
@@ -260,15 +379,12 @@ def test_spectral_subtraction_regression(sine_with_broadband_noise_wav_for_regre
     # For a purely random broadband noise, its power spectrum would be relatively flat.
     # We create a constant power spectrum for simplicity in this test.
     mock_noise_amplitude = 0.3 # Matches broadband_noise amplitude in fixture
-    mock_noise_power_avg = np.full(N, (mock_noise_amplitude**2) * N / 2) # Simplified flat power spectrum
+    mock_noise_power_avg = np.full(N // 2 + 1, (mock_noise_amplitude**2) * N / 2) # N // 2 + 1 is typical FFT output length
                                                                           # This is a rough approximation, actual value depends on exact FFT scaling
     
     # Create a mock MTSpace and set its noise_power_spectrum_avg
     mock_mt_space = MTSpace()
     mock_mt_space.noise_power_spectrum_avg = mock_noise_power_avg
-    
-    # Need to pass this mock_mt_space or its noise_power_spectrum_avg to get_current_analysis_result_with_plugin
-    # This implies modifying run_full_analysis_pipeline to accept p_noise_avg as a direct arg
     
     plugin_name = "spectral_subtraction"
     plugin_params = {"alpha": 2.0, "floor": 0.01, "post_filter_cutoff_hz": 0.0}
@@ -277,3 +393,26 @@ def test_spectral_subtraction_regression(sine_with_broadband_noise_wav_for_regre
         str(wav_file_path), plugin_name, plugin_params, p_noise_avg=mock_mt_space.noise_power_spectrum_avg
     )
     _run_regression_test(current_result, golden_data_path)
+
+def test_benchmark_regression(dummy_regression_benchmark_dataset):
+    golden_data_path = "tests/golden_data/benchmark_results.json"
+    dataset_root_path = dummy_regression_benchmark_dataset
+
+    benchmark_config = BenchmarkConfig(
+        dataset_name="regression_benchmark_data",
+        analysis_config=AnalysisConfig(
+            quantity=SignalQuantity.ACCEL,
+            window=WindowFunction.HANNING,
+            highpass_hz=50.0,
+            lowpass_hz=2000.0,
+            filter_order=4
+        ),
+        mt_config=MTConfig(anomaly_threshold=3.0, min_samples=2, recommended_samples=2),
+        nr_plugin_config={
+            "name": "notch_filter",
+            "params": {"freq_hz": 60.0, "q_factor": 30.0}
+        }
+    )
+
+    current_benchmark_result = run_benchmark_test(benchmark_config, dataset_root_path)
+    _run_benchmark_regression_test(current_benchmark_result, golden_data_path)
