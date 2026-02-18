@@ -69,6 +69,6 @@
 - [ ] ISSUE-055: [Developer] Implement Automated Anomaly Threshold Optimization in Benchmarking [IN PROGRESS]
     *   **[Architect] Subtask 1: Add `optimized_threshold` field to `BenchmarkResult` dataclass in `models.py`.** [DONE]
     *   **[Developer] Subtask 2: Implement threshold optimization logic in `run_benchmark_test` function.** [DONE]
-    *   **[Developer] Subtask 3: Add UI controls for threshold optimization in `app.py`.** [TODO]
-    *   **[QA/Expert] Subtask 4: Add unit tests for the optimization logic.** [OPEN]
+    *   **[Developer] Subtask 3: Add UI controls for threshold optimization in `app.py`.** [DONE]
+    *   **[QA/Expert] Subtask 4: Add unit tests for the optimization logic.** [TODO]
 - [ ] ISSUE-056: [Developer] Enhance Benchmarking Report Generation with Plots and Detailed Metrics [OPEN]
