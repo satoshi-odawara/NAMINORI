@@ -125,7 +125,11 @@ All initial development phases, including core backend refactoring, MT method im
     *   **[Developer] Subtask 2: Implement `calculate_spectral_features` in `feature_extraction.py`.** (Completed)
     *   **[Developer] Subtask 3: Update dependencies (`benchmarking.py`, etc.) to handle new features.** (Completed)
     *   **[QA/Expert] Subtask 4: Add unit tests for `calculate_spectral_features`.** (Completed)
-5.  **[Developer] Implement Automated Anomaly Threshold Optimization in Benchmarking (`ISSUE-055`):** NOT STARTED
+5.  **[Developer] Implement Automated Anomaly Threshold Optimization in Benchmarking (`ISSUE-055`):** IN PROGRESS
+    *   **[Architect] Subtask 1: Add `optimized_threshold` field to `BenchmarkResult` dataclass in `models.py`.**
+    *   **[Developer] Subtask 2: Implement threshold optimization logic in `run_benchmark_test` function.**
+    *   **[Developer] Subtask 3: Add UI controls for threshold optimization in `app.py`.**
+    *   **[QA/Expert] Subtask 4: Add unit tests for the optimization logic.**
 6.  **[Developer] Enhance Benchmarking Report Generation with Plots and Detailed Metrics (`ISSUE-056`):** NOT STARTED
 
 ---
