@@ -60,7 +60,7 @@
     *   **[Developer] Subtask 2: Implement core generation functions in `synthetic_data_generator.py`.** [DONE]
     *   **[Developer] Subtask 3: Create a Streamlit UI for interactive synthetic data generation and download.** [DONE]
     *   **[QA/Expert] Subtask 4: Add unit tests for `synthetic_data_generator.py`.** [DONE]
-- [ ] ISSUE-053: [QA/Expert] Benchmark MT Method Robustness with Varied Noise Levels and Types [OPEN]
+- [ ] ISSUE-053: [QA/Expert] Benchmark MT Method Robustness with Varied Noise Levels and Types [IN PROGRESS]
 - [ ] ISSUE-054: [Architect] Explore and Integrate Advanced Feature Extraction Techniques [OPEN]
 - [ ] ISSUE-055: [Developer] Implement Automated Anomaly Threshold Optimization in Benchmarking [OPEN]
 - [ ] ISSUE-056: [Developer] Enhance Benchmarking Report Generation with Plots and Detailed Metrics [OPEN]
