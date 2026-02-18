@@ -130,7 +130,11 @@ All initial development phases, including core backend refactoring, MT method im
     *   **[Developer] Subtask 2: Implement threshold optimization logic in `run_benchmark_test` function.** (Completed)
     *   **[Developer] Subtask 3: Add UI controls for threshold optimization in `app.py`.** (Completed)
     *   **[QA/Expert] Subtask 4: Add unit tests for the optimization logic.** (Completed)
-6.  **[Developer] Enhance Benchmarking Report Generation with Plots and Detailed Metrics (`ISSUE-056`):** NOT STARTED
+6.  **[Developer] Enhance Benchmarking Report Generation with Plots and Detailed Metrics (`ISSUE-056`):** IN PROGRESS
+    *   **[Architect] Subtask 1: Add fields for confusion matrix and ROC curve data to `BenchmarkResult` dataclass.**
+    *   **[Developer] Subtask 2: Implement calculation for new metrics/plots in `run_benchmark_test`.**
+    *   **[Developer] Subtask 3: Add new plots (Confusion Matrix, ROC Curve, MD Scatter) to the benchmark results UI in `app.py`.**
+    *   **[QA/Expert] Subtask 4: Add unit tests for the new metric calculations.**
 
 ---
 
