@@ -46,7 +46,7 @@ def calculate_spectral_features(freq_hz: np.ndarray, magnitude: np.ndarray) -> d
     # Normalize the magnitude spectrum to be a probability distribution
     mag_sum = np.sum(magnitude)
     if mag_sum == 0:
-        return {'centroid': 0.0, 'spread': 0.0, 'entropy': 0.0}
+        return {'spectral_centroid': 0.0, 'spectral_spread': 0.0, 'spectral_entropy': 0.0}
     
     prob_dist = magnitude / mag_sum
 
