@@ -179,18 +179,29 @@ if page_selection == "通常解析":
 
             
             time_features = calculate_time_domain_features(processed)
-            freqs, mags, power_bands = calculate_fft_features(processed, fs_hz, config.window)
+            freqs, mags, freq_features = calculate_fft_features(processed, fs_hz, config.window)
             quality = calculate_quality_metrics(data_raw, fs_hz, time_features.rms, mags)
             confidence = get_confidence_score(quality)
             unit = config.quantity.unit_str
+
+            # Combine all features for MT method and audit log
+            all_features = VibrationFeatures(
+                **asdict(time_features),
+                **freq_features
+            )
 
             # --- Display ---
             col1, col2 = st.columns([1, 2])
             with col1:
                 st.subheader("時間領域 特徴量")
-                st.metric(f"RMS ({unit})", f"{time_features.rms:.3f}")
-                st.metric(f"Peak ({unit})", f"{time_features.peak:.3f}")
-                st.metric("Kurtosis", f"{time_features.kurtosis:.3f}")
+                st.metric(f"RMS ({unit})", f"{all_features.rms:.3f}")
+                st.metric(f"Peak ({unit})", f"{all_features.peak:.3f}")
+                st.metric("Kurtosis", f"{all_features.kurtosis:.3f}")
+
+                st.subheader("周波数領域 特徴量")
+                st.metric("Spectral Centroid (Hz)", f"{all_features.spectral_centroid:.2f}")
+                st.metric("Spectral Spread (Hz)", f"{all_features.spectral_spread:.2f}")
+                st.metric("Spectral Entropy", f"{all_features.spectral_entropy:.3f}")
                 
                 st.subheader("データ品質")
                 st.metric("クリッピング率", f"{quality.clipping_ratio:.2%}")
@@ -200,13 +211,7 @@ if page_selection == "通常解析":
                 st.markdown(f'#### 診断信頼度: <span style="color:{color};">{confidence:.1f}%</span>', unsafe_allow_html=True)
                 
                 if 'mt_space' in st.session_state and st.session_state.mt_space.mean_vector is not None:
-                    features = VibrationFeatures(
-                        **asdict(time_features),
-                        power_low=power_bands['low'],
-                        power_mid=power_bands['mid'],
-                        power_high=power_bands['high']
-                    )
-                    md = st.session_state.mt_space.calculate_md(features)
+                    md = st.session_state.mt_space.calculate_md(all_features)
                     md_color = "green" if md < 3.0 else "orange" if md < 5.0 else "red"
                     st.markdown(f'#### MT法診断 (MD): <span style="color:{md_color};">{md:.2f}</span>', unsafe_allow_html=True)
             with col2:

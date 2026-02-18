@@ -119,14 +119,12 @@ def run_benchmark_test(benchmark_config: BenchmarkConfig, dataset_root_path: Pat
                 benchmark_config.analysis_config.filter_order
             )
             time_features = calculate_time_domain_features(processed)
-            _, _, power_bands = calculate_fft_features(
+            _, _, freq_features = calculate_fft_features(
                 processed, fs_hz, benchmark_config.analysis_config.window
             )
             features = VibrationFeatures(
                 **asdict(time_features),
-                power_low=power_bands['low'],
-                power_mid=power_bands['mid'],
-                power_high=power_bands['high']
+                **freq_features
             )
             mt_space.add_normal_sample(features, processed, fs_hz, benchmark_config.analysis_config)
 
@@ -165,12 +163,10 @@ def run_benchmark_test(benchmark_config: BenchmarkConfig, dataset_root_path: Pat
                     processed_final = signal_post_nr
 
             time_features = calculate_time_domain_features(processed_final)
-            _, _, power_bands = calculate_fft_features(processed_final, fs_hz, benchmark_config.analysis_config.window)
+            _, _, freq_features = calculate_fft_features(processed_final, fs_hz, benchmark_config.analysis_config.window)
             vibration_features = VibrationFeatures(
                 **asdict(time_features),
-                power_low=power_bands['low'],
-                power_mid=power_bands['mid'],
-                power_high=power_bands['high']
+                **freq_features
             )
             
             md = mt_space.calculate_md(vibration_features)
