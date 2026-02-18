@@ -57,10 +57,13 @@ class TimeDomainFeatures:
 
 @dataclass
 class VibrationFeatures(TimeDomainFeatures):
-    """Vibration features including frequency-domain power bands"""
+    """Vibration features including frequency-domain power bands and spectral shape features"""
     power_low: float
     power_mid: float
     power_high: float
+    spectral_centroid: float
+    spectral_spread: float
+    spectral_entropy: float
 
     def to_vector(self) -> np.ndarray:
         """
@@ -69,7 +72,8 @@ class VibrationFeatures(TimeDomainFeatures):
         return np.array([
             self.rms, self.peak, self.kurtosis, self.skewness,
             self.crest_factor, self.shape_factor,
-            self.power_low, self.power_mid, self.power_high
+            self.power_low, self.power_mid, self.power_high,
+            self.spectral_centroid, self.spectral_spread, self.spectral_entropy
         ])
 
 @dataclass
