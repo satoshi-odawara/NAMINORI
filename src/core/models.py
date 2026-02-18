@@ -55,6 +55,9 @@ class TimeDomainFeatures:
     crest_factor: float
     shape_factor: float
 
+
+
+
 @dataclass
 class VibrationFeatures(TimeDomainFeatures):
     """Vibration features including frequency-domain power bands and spectral shape features"""

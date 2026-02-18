@@ -32,13 +32,50 @@ def calculate_time_domain_features(data: np.ndarray) -> TimeDomainFeatures:
         shape_factor=shape_factor,
     )
 
+def calculate_spectral_features(freq_hz: np.ndarray, magnitude: np.ndarray) -> dict[str, float]:
+    """
+    Calculates spectral shape features from a magnitude spectrum.
+
+    Args:
+        freq_hz: Frequency axis (Hz).
+        magnitude: FFT magnitude spectrum.
+
+    Returns:
+        A dictionary containing spectral centroid, spread, and entropy.
+    """
+    # Normalize the magnitude spectrum to be a probability distribution
+    mag_sum = np.sum(magnitude)
+    if mag_sum == 0:
+        return {'centroid': 0.0, 'spread': 0.0, 'entropy': 0.0}
+    
+    prob_dist = magnitude / mag_sum
+
+    # Spectral Centroid
+    centroid = np.sum(freq_hz * prob_dist)
+    
+    # Spectral Spread
+    spread = np.sqrt(np.sum(((freq_hz - centroid)**2) * prob_dist))
+    
+    # Spectral Entropy
+    # Use a small epsilon to avoid log(0)
+    epsilon = 1e-12
+    entropy = -np.sum(prob_dist * np.log2(prob_dist + epsilon))
+    
+    return {
+        'spectral_centroid': centroid,
+        'spectral_spread': spread,
+        'spectral_entropy': entropy,
+    }
+
+
 def calculate_fft_features(
     data: np.ndarray,
     fs_hz: int,
     window_type: WindowFunction
 ) -> Tuple[np.ndarray, np.ndarray, dict[str, float]]:
     """
-    Performs FFT and calculates frequency-domain features including power band contributions.
+    Performs FFT and calculates frequency-domain features including power bands
+    and spectral shape features.
 
     Args:
         data: Input signal (NumPy array).
@@ -49,7 +86,7 @@ def calculate_fft_features(
         Tuple[np.ndarray, np.ndarray, dict[str, float]]:
             - freq_hz: Frequency axis (Hz).
             - magnitude: FFT magnitude with amplitude correction.
-            - power_bands: Dictionary containing power contributions of frequency bands.
+            - all_features: Dictionary containing power bands and spectral shape features.
     """
     if window_type == WindowFunction.HANNING:
         window = np.hanning(len(data))
@@ -60,9 +97,7 @@ def calculate_fft_features(
     fft_result = np.fft.rfft(data_windowed)
     freq_hz = np.fft.rfftfreq(len(data_windowed), d=1/fs_hz)
 
-    # Correct amplitude scaling: 2.0 * |FFT| / sum(window)
-    # The 2.0x is to account for the positive frequencies only (from rfft)
-    # DC component (at index 0) and Nyquist component (last index, if present) should not be doubled.
+    # Correct amplitude scaling
     magnitude = np.abs(fft_result) / np.sum(window)
     magnitude[1:] *= 2
 
@@ -76,9 +111,15 @@ def calculate_fft_features(
         power_low, power_mid, power_high = 0.0, 0.0, 0.0
 
     power_bands = {
-        'low': power_low,
-        'mid': power_mid,
-        'high': power_high
+        'power_low': power_low,
+        'power_mid': power_mid,
+        'power_high': power_high
     }
+    
+    # Calculate spectral shape features
+    spectral_shape_features = calculate_spectral_features(freq_hz, magnitude)
+    
+    # Combine all frequency-domain features
+    all_features = {**power_bands, **spectral_shape_features}
 
-    return freq_hz, magnitude, power_bands
+    return freq_hz, magnitude, all_features
