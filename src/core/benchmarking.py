@@ -193,12 +193,18 @@ def run_benchmark_test(benchmark_config: BenchmarkConfig, dataset_root_path: Pat
     # --- 5. Calculate Overall Metrics ---
     processed_files_count = len(all_file_results)
     
-    accuracy = accuracy_score(all_true_labels, all_predicted_labels) if processed_files_count > 0 else 0
-    precision = precision_score(all_true_labels, all_predicted_labels, pos_label='anomaly', zero_division=0)
-    recall = recall_score(all_true_labels, all_predicted_labels, pos_label='anomaly', zero_division=0)
-    f1 = f1_score(all_true_labels, all_predicted_labels, pos_label='anomaly', zero_division=0)
-    
-    report = classification_report(all_true_labels, all_predicted_labels, target_names=['normal', 'anomaly'], output_dict=False, zero_division=0)
+    if processed_files_count > 0:
+        accuracy = accuracy_score(all_true_labels, all_predicted_labels)
+        precision = precision_score(all_true_labels, all_predicted_labels, pos_label='anomaly', zero_division=0)
+        recall = recall_score(all_true_labels, all_predicted_labels, pos_label='anomaly', zero_division=0)
+        f1 = f1_score(all_true_labels, all_predicted_labels, pos_label='anomaly', zero_division=0)
+        report = classification_report(all_true_labels, all_predicted_labels, target_names=['normal', 'anomaly'], output_dict=False, zero_division=0)
+    else:
+        accuracy = 0
+        precision = 0
+        recall = 0
+        f1 = 0
+        report = "No files were processed."
 
     avg_processing_time_ms = total_processing_time / processed_files_count if processed_files_count > 0 else 0
     
