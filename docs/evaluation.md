@@ -125,3 +125,29 @@ your_custom_dataset_name/
 *   **`test/anomaly/`**: Contains WAV files representing *anomalous* operating conditions, used as part of the test set for evaluation.
 
 All WAV files should be mono, 16-bit PCM, and have a consistent sampling rate within a given dataset. Adhering to this structure ensures that the benchmarking framework can correctly process and evaluate your custom data.
+
+## 5. MT Method Robustness Benchmark Results
+
+To evaluate the robustness of the core Mahalanobis-Taguchi (MT) method, a benchmark was performed using synthetically generated data. The test systematically evaluated the anomaly detection performance as the Signal-to-Noise Ratio (SNR) was decreased.
+
+### 5.1 Benchmark Setup
+
+*   **Baseline Signal:** A pure sine wave at 120 Hz was used as the "normal" signal.
+*   **Anomaly Signal:** The normal signal was modified with slight Amplitude Modulation (AM) to create a subtle anomaly.
+*   **Noise:** White noise was added to both normal and anomaly signals at decreasing SNR levels (from 30dB down to -5dB).
+*   **Procedure:** For each SNR level, a new synthetic dataset was generated (30 normal training files, 10 normal test files, 10 anomaly test files). The MT method was then trained on the normal data and evaluated against the test set.
+
+### 5.2 Summary of Results
+
+The following table summarizes the key performance metrics at each SNR level. As expected, performance degrades as the noise level increases, but the F1-Score remains respectable even at a challenging 0dB SNR.
+
+| SNR (dB) | Accuracy | Precision | Recall   | F1-Score |
+|----------|----------|-----------|----------|----------|
+| 30       | 100.00%  | 100.00%   | 100.00%  | 1.000    |
+| 20       | 80.00%   | 71.43%    | 100.00%  | 0.833    |
+| 10       | 70.00%   | 62.50%    | 100.00%  | 0.769    |
+| 5        | 65.00%   | 58.82%    | 100.00%  | 0.741    |
+| 0        | 85.00%   | 76.92%    | 100.00%  | 0.870    |
+| -5       | 40.00%   | 42.86%    | 60.00%   | 0.500    |
+
+A `RuntimeWarning` related to `sqrt` was observed at 0dB, indicating potential numerical instability under very high noise conditions, which warrants future investigation.

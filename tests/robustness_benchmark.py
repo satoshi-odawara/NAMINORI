@@ -23,6 +23,7 @@ import numpy as np
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from dataclasses import asdict
 from src.utils import synthetic_data_generator as sdg
 from src.core.benchmarking import run_benchmark_test, BenchmarkConfig, MTConfig
 from src.core.models import AnalysisConfig, SignalQuantity, WindowFunction
@@ -53,7 +54,9 @@ def create_synthetic_dataset(root_dir: Path, signal_config: sdg.SignalConfig, nu
 
     # Generate and save anomaly test files
     print(f"Generating {num_test_anomaly} anomaly test files...")
-    anomaly_config = sdg.SignalConfig(**sdg.asdict(signal_config)) # Create a copy
+    anomaly_config = sdg.SignalConfig(**asdict(signal_config)) # Create a copy
+    if anomaly_config.noise_config:
+        anomaly_config.noise_config = sdg.NoiseConfig(**anomaly_config.noise_config)
     # Introduce a slight anomaly - e.g., add AM modulation
     if not anomaly_config.am_config:
         anomaly_config.am_config = sdg.AMConfig(mod_freq_hz=15.0, mod_index=0.3)
@@ -96,15 +99,14 @@ def main():
         base_tmp_path = Path(base_tmp_dir)
 
         for snr in snr_levels_db:
-            print("
-" + "="*50)
+            print("\n" + "="*50)
             print(f"--- Running Benchmark for SNR = {snr} dB ---")
             print("="*50)
 
             # --- 2. Generate Dataset for current SNR ---
             scenario_dir = base_tmp_path / f"snr_{snr}db"
             
-            current_signal_config = sdg.SignalConfig(**sdg.asdict(base_signal_config))
+            current_signal_config = sdg.SignalConfig(**asdict(base_signal_config))
             current_signal_config.noise_config = sdg.NoiseConfig(noise_type=sdg.NoiseType.WHITE, snr_db=snr)
             
             create_synthetic_dataset(
@@ -125,8 +127,7 @@ def main():
             try:
                 result = run_benchmark_test(benchmark_config, scenario_dir)
                 
-                print(f"
---- Results for SNR = {snr} dB ---")
+                print(f"\n--- Results for SNR = {snr} dB ---")
                 print(f"  Accuracy:  {result.accuracy:.2%}")
                 print(f"  Precision: {result.precision:.2%}")
                 print(f"  Recall:    {result.recall:.2%}")
@@ -148,8 +149,7 @@ def main():
                 })
 
     # --- 4. Print Final Summary ---
-    print("
-" + "="*60)
+    print("\n" + "="*60)
     print("      MT Method Robustness Benchmark Summary")
     print("="*60)
     if results_summary:
