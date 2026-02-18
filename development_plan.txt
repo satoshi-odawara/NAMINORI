@@ -110,8 +110,8 @@ All initial development phases, including core backend refactoring, MT method im
 **Tasks:**
 
 1.  **[Architect] Integrate DCASE 2020 Challenge Task 2 for Benchmarking (`ISSUE-051`):** IN PROGRESS
-    *   **[Architect] Subtask 1: Design DCASE Data Preparation/Transformation Strategy.** (Completed: Transform DCASE data into `dataset_root/<machine_id>/train/normal`, `dataset_root/<machine_id>/test/normal`, `dataset_root/<machine_id>/test/anomaly` structure.)
-    *   **[Developer] Subtask 2: Implement a Python script to download and pre-process the DCASE 2020 "pump" development dataset.** This script will restructure the data as designed.
+    *   **[Architect] Subtask 1: Design DCASE Data Preparation/Transformation Strategy.** (Completed)
+    *   **[Developer] Subtask 2: Implement a Python script to download and pre-process the DCASE 2020 "pump" development dataset.** (Completed)
     *   **[Developer] Subtask 3: Modify `run_benchmark_test` in `benchmarking.py` to recursively find and run benchmarks for all machine ID subdirectories within the given `dataset_root` if such subdirectories exist.**
     *   **[QA/Expert] Subtask 4: Add unit/integration tests for DCASE data handling and benchmark execution.**
 2.  **[Developer] Enhance Synthetic Data Generation for Complex Scenarios (`ISSUE-052`):** NOT STARTED

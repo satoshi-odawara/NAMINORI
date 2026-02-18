@@ -1,18 +1,19 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import List, Dict, Any, Optional
 import numpy as np
 import time
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
+from datetime import datetime
+from pathlib import Path
 
 from src.core.models import AnalysisConfig, SignalQuantity, WindowFunction, VibrationFeatures
 from src.core.signal_processing import load_wav_file, remove_dc_offset, apply_butterworth_filter
 from src.core.feature_extraction import calculate_time_domain_features, calculate_fft_features
 from src.core.quality_check import calculate_quality_metrics
 from src.diagnostics.mt_method import MTSpace
-from src.core.plugins import plugin_manager # Import plugin manager
-from src.core.evaluation import perform_nr_evaluation, NoiseReductionEvaluation # Import evaluation components
+from src.core.plugins import plugin_manager
+from src.core.evaluation import perform_nr_evaluation, NoiseReductionEvaluation
 from src.utils.audit_log import AnalysisResult
-from pathlib import Path
 
 
 @dataclass
@@ -55,179 +56,172 @@ class BenchmarkResult:
 
 def run_benchmark_test(benchmark_config: BenchmarkConfig, dataset_root_path: Path) -> BenchmarkResult:
     """
-    Runs a benchmark test using the specified configuration and dataset.
+    Runs a benchmark test on a dataset, handling multiple machine IDs if present.
+
+    If subdirectories matching 'id_*' are found in `dataset_root_path`, it runs
+    a separate benchmark for each (training a unique MTSpace per ID) and aggregates
+    the results. Otherwise, it runs a single benchmark on the root directory.
     """
-    start_time = time.time()
-    
-    # --- 1. Load Dataset Paths ---
-    train_normal_dir = dataset_root_path / "train" / "normal"
-    test_normal_dir = dataset_root_path / "test" / "normal"
-    test_anomaly_dir = dataset_root_path / "test" / "anomaly"
+    overall_start_time = time.time()
 
-    train_normal_files = list(train_normal_dir.rglob("*.wav"))
-    test_normal_files = list(test_normal_dir.rglob("*.wav"))
-    test_anomaly_files = list(test_anomaly_dir.rglob("*.wav"))
+    # --- 1. Identify Machine ID Directories ---
+    machine_id_dirs = [p for p in dataset_root_path.glob('id_*') if p.is_dir()]
+    if not machine_id_dirs:
+        # If no id_* subdirectories, treat the root as the single machine directory
+        machine_id_dirs = [dataset_root_path]
 
-    if not train_normal_files:
-        raise ValueError(f"No normal training files found in {train_normal_dir}")
-    if not test_normal_files and not test_anomaly_files:
-        raise ValueError(f"No test files found in {dataset_root_path / 'test'}")
-
-    all_test_files_with_labels = [
-        (f, "normal") for f in test_normal_files
-    ] + [
-        (f, "anomaly") for f in test_anomaly_files
-    ]
-    
-    # --- 2. Train MT Space and Learn Noise Profile ---
-    mt_space = MTSpace(
-        min_samples=benchmark_config.mt_config.min_samples,
-        recommended_samples=benchmark_config.mt_config.recommended_samples
-    )
-    
-    # Use benchmark_config.analysis_config for training
-    # This involves processing normal files and adding them to mt_space
-    for file_path in train_normal_files:
-        fs_hz, data_normalized, _ = load_wav_file(str(file_path))
-        processed_dc_removed = remove_dc_offset(data_normalized)
-        processed_final_pre_nr = apply_butterworth_filter(
-            processed_dc_removed, fs_hz, 
-            benchmark_config.analysis_config.highpass_hz, 
-            benchmark_config.analysis_config.lowpass_hz, 
-            benchmark_config.analysis_config.filter_order
-        )
-        
-        time_features = calculate_time_domain_features(processed_final_pre_nr)
-        _, _, power_bands_dict = calculate_fft_features(
-            processed_final_pre_nr, fs_hz, benchmark_config.analysis_config.window
-        )
-        normal_features = VibrationFeatures(
-            **asdict(time_features),
-            power_low=power_bands_dict['low'],
-            power_mid=power_bands_dict['mid'],
-            power_high=power_bands_dict['high']
-        )
-        mt_space.add_normal_sample(normal_features, processed_final_pre_nr, fs_hz, benchmark_config.analysis_config)
-    
-    if mt_space.mean_vector is None:
-        raise RuntimeError("MT Space could not be established from normal training data.")
-
-    # --- 3. Evaluate Test Files ---
-    file_results: List[FileBenchmarkResult] = []
-    true_labels = []
-    predicted_labels = []
+    # --- Aggregated results across all machine IDs ---
+    all_file_results: List[FileBenchmarkResult] = []
+    all_true_labels = []
+    all_predicted_labels = []
     total_processing_time = 0
+    total_files_count = 0
 
-    for file_path, actual_label in all_test_files_with_labels:
-        file_start_time = time.time()
+    for machine_dir in machine_id_dirs:
+        print(f"--- Processing Machine Directory: {machine_dir.name} ---")
         
-        # Load and preprocess
-        fs_hz, data_normalized, file_hash = load_wav_file(str(file_path))
-        processed_dc_removed = remove_dc_offset(data_normalized)
-        
-        signal_pre_nr = apply_butterworth_filter(
-            processed_dc_removed, fs_hz, 
-            benchmark_config.analysis_config.highpass_hz, 
-            benchmark_config.analysis_config.lowpass_hz, 
-            benchmark_config.analysis_config.filter_order
+        # --- 2. Load Dataset Paths for the current machine ---
+        train_normal_dir = machine_dir / "train" / "normal"
+        test_normal_dir = machine_dir / "test" / "normal"
+        test_anomaly_dir = machine_dir / "test" / "anomaly"
+
+        train_normal_files = list(train_normal_dir.rglob("*.wav"))
+        test_normal_files = list(test_normal_dir.rglob("*.wav"))
+        test_anomaly_files = list(test_anomaly_dir.rglob("*.wav"))
+
+        if not train_normal_files:
+            print(f"Warning: No normal training files found in {train_normal_dir}. Skipping machine {machine_dir.name}.")
+            continue
+        if not test_normal_files and not test_anomaly_files:
+            print(f"Warning: No test files found in {machine_dir / 'test'}. Skipping machine {machine_dir.name}.")
+            continue
+
+        machine_test_files_with_labels = [
+            (f, "normal") for f in test_normal_files
+        ] + [
+            (f, "anomaly") for f in test_anomaly_files
+        ]
+        total_files_count += len(machine_test_files_with_labels)
+
+        # --- 3. Train MT Space for the current machine ---
+        mt_space = MTSpace(
+            min_samples=benchmark_config.mt_config.min_samples,
+            recommended_samples=benchmark_config.mt_config.recommended_samples
         )
         
-        nr_eval_results = None
-        processed_final = signal_pre_nr
+        for file_path in train_normal_files:
+            fs_hz, data, _ = load_wav_file(str(file_path))
+            processed = remove_dc_offset(data)
+            processed = apply_butterworth_filter(
+                processed, fs_hz,
+                benchmark_config.analysis_config.highpass_hz,
+                benchmark_config.analysis_config.lowpass_hz,
+                benchmark_config.analysis_config.filter_order
+            )
+            time_features = calculate_time_domain_features(processed)
+            _, _, power_bands = calculate_fft_features(
+                processed, fs_hz, benchmark_config.analysis_config.window
+            )
+            features = VibrationFeatures(
+                **asdict(time_features),
+                power_low=power_bands['low'],
+                power_mid=power_bands['mid'],
+                power_high=power_bands['high']
+            )
+            mt_space.add_normal_sample(features, processed, fs_hz, benchmark_config.analysis_config)
 
-        if benchmark_config.nr_plugin_config and mt_space.noise_power_spectrum_avg is not None:
-            plugin_name = benchmark_config.nr_plugin_config["name"]
-            plugin_params = benchmark_config.nr_plugin_config["params"]
-            selected_plugin = plugin_manager.get_plugin(plugin_name)
+        if mt_space.mean_vector is None:
+            print(f"Warning: MT Space could not be established for machine {machine_dir.name}. Skipping.")
+            continue
+
+        # --- 4. Evaluate Test Files for the current machine ---
+        for file_path, actual_label in machine_test_files_with_labels:
+            file_start_time = time.time()
             
-            if selected_plugin:
-                if plugin_name == "spectral_subtraction":
-                    signal_post_nr = selected_plugin.process(
-                        signal_pre_nr,
-                        fs_hz,
-                        p_noise_avg=mt_space.noise_power_spectrum_avg, # Pass learned noise profile
-                        **plugin_params
-                    )
-                else:
-                    signal_post_nr = selected_plugin.process(
-                        signal_pre_nr,
-                        fs_hz,
-                        **plugin_params
-                    )
-                nr_eval_results = perform_nr_evaluation(signal_pre_nr, signal_post_nr)
-                processed_final = signal_post_nr
-            else:
-                print(f"Warning: NR Plugin '{plugin_name}' not found. Skipping NR for {file_path.name}")
-        
-        # Extract features from processed_final
-        time_features = calculate_time_domain_features(processed_final)
-        _, _, power_bands_dict = calculate_fft_features(processed_final, fs_hz, benchmark_config.analysis_config.window)
-        
-        vibration_features = VibrationFeatures(
-            **asdict(time_features),
-            power_low=power_bands_dict['low'],
-            power_mid=power_bands_dict['mid'],
-            power_high=power_bands_dict['high']
-        )
-        
-        # Calculate MD
-        md = mt_space.calculate_md(vibration_features)
-        
-        # Predict label
-        predicted_label = "anomaly" if md > benchmark_config.mt_config.anomaly_threshold else "normal"
-        
-        file_processing_time = (time.time() - file_start_time) * 1000 # ms
-        total_processing_time += file_processing_time
+            fs_hz, data, _ = load_wav_file(str(file_path))
+            processed_dc_removed = remove_dc_offset(data)
+            signal_pre_nr = apply_butterworth_filter(
+                processed_dc_removed, fs_hz,
+                benchmark_config.analysis_config.highpass_hz,
+                benchmark_config.analysis_config.lowpass_hz,
+                benchmark_config.analysis_config.filter_order
+            )
 
-        file_results.append(FileBenchmarkResult(
-            file_path=str(file_path),
-            actual_label=actual_label,
-            predicted_label=predicted_label,
-            mahalanobis_distance=md,
-            analysis_result={"features": asdict(vibration_features)}, # Simplified, could include more
-            nr_evaluation=asdict(nr_eval_results) if nr_eval_results else None
-        ))
-        true_labels.append(actual_label)
-        predicted_labels.append(predicted_label)
+            nr_eval_results = None
+            processed_final = signal_pre_nr
 
-    # --- 4. Calculate Overall Metrics ---
-    total_files = len(all_test_files_with_labels)
-    processed_files = len(file_results)
-    
-    accuracy = accuracy_score(true_labels, predicted_labels) if processed_files > 0 else 0
-    precision = precision_score(true_labels, predicted_labels, pos_label='anomaly', zero_division=0) if processed_files > 0 else 0
-    recall = recall_score(true_labels, predicted_labels, pos_label='anomaly', zero_division=0) if processed_files > 0 else 0
-    f1 = f1_score(true_labels, predicted_labels, pos_label='anomaly', zero_division=0) if processed_files > 0 else 0
-    
-    report = classification_report(true_labels, predicted_labels, target_names=['normal', 'anomaly'], output_dict=False, zero_division=0)
+            if benchmark_config.nr_plugin_config and mt_space.noise_power_spectrum_avg is not None:
+                plugin_name = benchmark_config.nr_plugin_config["name"]
+                plugin_params = benchmark_config.nr_plugin_config.get("params", {})
+                selected_plugin = plugin_manager.get_plugin(plugin_name)
+                
+                if selected_plugin:
+                    process_params = {"signal": signal_pre_nr, "fs_hz": fs_hz, **plugin_params}
+                    if plugin_name == "spectral_subtraction":
+                        process_params["p_noise_avg"] = mt_space.noise_power_spectrum_avg
+                    
+                    signal_post_nr = selected_plugin.process(**process_params)
+                    nr_eval_results = perform_nr_evaluation(signal_pre_nr, signal_post_nr)
+                    processed_final = signal_post_nr
 
-    avg_processing_time_ms = total_processing_time / processed_files if processed_files > 0 else 0
+            time_features = calculate_time_domain_features(processed_final)
+            _, _, power_bands = calculate_fft_features(processed_final, fs_hz, benchmark_config.analysis_config.window)
+            vibration_features = VibrationFeatures(
+                **asdict(time_features),
+                power_low=power_bands['low'],
+                power_mid=power_bands['mid'],
+                power_high=power_bands['high']
+            )
+            
+            md = mt_space.calculate_md(vibration_features)
+            predicted_label = "anomaly" if md > benchmark_config.mt_config.anomaly_threshold else "normal"
+            
+            file_processing_time = (time.time() - file_start_time) * 1000
+            total_processing_time += file_processing_time
+
+            all_file_results.append(FileBenchmarkResult(
+                file_path=str(file_path),
+                actual_label=actual_label,
+                predicted_label=predicted_label,
+                mahalanobis_distance=md,
+                analysis_result={"features": asdict(vibration_features)},
+                nr_evaluation=asdict(nr_eval_results) if nr_eval_results else None
+            ))
+            all_true_labels.append(actual_label)
+            all_predicted_labels.append(predicted_label)
+
+    # --- 5. Calculate Overall Metrics ---
+    processed_files_count = len(all_file_results)
     
-    # NR performance metrics (e.g., average RMS reduction)
+    accuracy = accuracy_score(all_true_labels, all_predicted_labels) if processed_files_count > 0 else 0
+    precision = precision_score(all_true_labels, all_predicted_labels, pos_label='anomaly', zero_division=0)
+    recall = recall_score(all_true_labels, all_predicted_labels, pos_label='anomaly', zero_division=0)
+    f1 = f1_score(all_true_labels, all_predicted_labels, pos_label='anomaly', zero_division=0)
+    
+    report = classification_report(all_true_labels, all_predicted_labels, target_names=['normal', 'anomaly'], output_dict=False, zero_division=0)
+
+    avg_processing_time_ms = total_processing_time / processed_files_count if processed_files_count > 0 else 0
+    
     nr_performance_metrics = {}
     if benchmark_config.nr_plugin_config:
         rms_reductions = [
             (res.nr_evaluation['features_before']['rms'] - res.nr_evaluation['features_after']['rms']) / res.nr_evaluation['features_before']['rms'] * 100
-            for res in file_results if res.nr_evaluation and res.nr_evaluation['features_before']['rms'] != 0
+            for res in all_file_results if res.nr_evaluation and res.nr_evaluation['features_before']['rms'] != 0
         ]
         if rms_reductions:
             nr_performance_metrics['avg_rms_reduction_pct'] = np.mean(rms_reductions)
-            nr_performance_metrics['min_rms_reduction_pct'] = np.min(rms_reductions)
-            nr_performance_metrics['max_rms_reduction_pct'] = np.max(rms_reductions)
-
-    total_duration = time.time() - start_time
 
     return BenchmarkResult(
         benchmark_config=benchmark_config,
         timestamp=datetime.now().isoformat(),
-        total_files=total_files,
-        processed_files=processed_files,
+        total_files=total_files_count,
+        processed_files=processed_files_count,
         accuracy=accuracy,
         precision=precision,
         recall=recall,
         f1_score=f1,
         classification_report=report,
         avg_processing_time_ms=avg_processing_time_ms,
-        file_results=file_results,
+        file_results=all_file_results,
         nr_performance_metrics=nr_performance_metrics if nr_performance_metrics else None
     )
