@@ -53,6 +53,9 @@ class BenchmarkResult:
     avg_processing_time_ms: float
     file_results: List[FileBenchmarkResult]
     optimized_threshold: Optional[float] = None
+    confusion_matrix: Optional[List] = None
+    roc_curve: Optional[Dict] = None
+    roc_auc: Optional[float] = None
     nr_performance_metrics: Optional[Dict[str, Any]] = None # e.g., avg RMS reduction, avg SNR improvement
 
 
