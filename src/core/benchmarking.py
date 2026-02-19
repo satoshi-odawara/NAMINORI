@@ -2,7 +2,7 @@ from dataclasses import dataclass, asdict
 from typing import List, Dict, Any, Optional
 import numpy as np
 import time
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report, confusion_matrix, roc_curve, roc_auc_score
 from datetime import datetime
 from pathlib import Path
 
@@ -175,18 +175,45 @@ def run_benchmark_test(benchmark_config: BenchmarkConfig, dataset_root_path: Pat
 
     processed_files_count = len(all_file_results)
     
-    # ... (Metric calculation logic is the same)
+    # Initialize new metrics
+    cm = None
+    roc_curve_data = None
+    roc_auc = None
+
     if processed_files_count > 0:
         accuracy = accuracy_score(all_true_labels, all_predicted_labels)
         precision = precision_score(all_true_labels, all_predicted_labels, pos_label='anomaly', zero_division=0)
         recall = recall_score(all_true_labels, all_predicted_labels, pos_label='anomaly', zero_division=0)
         f1 = f1_score(all_true_labels, all_predicted_labels, pos_label='anomaly', zero_division=0)
         report = classification_report(all_true_labels, all_predicted_labels, target_names=['normal', 'anomaly'], output_dict=False, zero_division=0)
+
+        # Calculate Confusion Matrix
+        cm = confusion_matrix(all_true_labels, all_predicted_labels, labels=['normal', 'anomaly']).tolist()
+
+        # Calculate ROC Curve and AUC
+        binary_true_labels = [1 if label == 'anomaly' else 0 for label in all_true_labels]
+        md_scores_arr = np.array([res.mahalanobis_distance for res in all_file_results])
+        # Only calculate ROC if there are both positive and negative samples
+        if len(np.unique(binary_true_labels)) > 1:
+            # Need to ensure that `md_scores_arr` and `binary_true_labels` are aligned
+            # which they are because `all_file_results` and `all_true_labels` are built in parallel.
+            fpr, tpr, thresholds = roc_curve(binary_true_labels, md_scores_arr)
+            roc_auc = roc_auc_score(binary_true_labels, md_scores_arr)
+            roc_curve_data = {'fpr': fpr.tolist(), 'tpr': tpr.tolist(), 'thresholds': thresholds.tolist()}
+
     else:
         accuracy, precision, recall, f1, report = 0, 0, 0, 0, "No files processed."
 
     avg_processing_time_ms = total_processing_time / processed_files_count if processed_files_count > 0 else 0
-    # ... (NR performance metrics logic is the same)
+    
+    nr_performance_metrics = {}
+    if benchmark_config.nr_plugin_config:
+        rms_reductions = [
+            (res.nr_evaluation['features_before']['rms'] - res.nr_evaluation['features_after']['rms']) / res.nr_evaluation['features_before']['rms'] * 100
+            for res in all_file_results if res.nr_evaluation and res.nr_evaluation['features_before']['rms'] != 0
+        ]
+        if rms_reductions:
+            nr_performance_metrics['avg_rms_reduction_pct'] = np.mean(rms_reductions)
 
     return BenchmarkResult(
         benchmark_config=benchmark_config,
@@ -201,5 +228,8 @@ def run_benchmark_test(benchmark_config: BenchmarkConfig, dataset_root_path: Pat
         avg_processing_time_ms=avg_processing_time_ms,
         file_results=all_file_results,
         optimized_threshold=optimized_threshold,
-        nr_performance_metrics=None # Simplified for this change
+        confusion_matrix=cm,
+        roc_curve=roc_curve_data,
+        roc_auc=roc_auc,
+        nr_performance_metrics=nr_performance_metrics if nr_performance_metrics else None
     )

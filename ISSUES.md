@@ -73,6 +73,6 @@
     *   **[QA/Expert] Subtask 4: Add unit tests for the optimization logic.** [DONE]
 - [ ] ISSUE-056: [Developer] Enhance Benchmarking Report Generation with Plots and Detailed Metrics [IN PROGRESS]
     *   **[Architect] Subtask 1: Add fields for confusion matrix and ROC curve data to `BenchmarkResult` dataclass.** [DONE]
-    *   **[Developer] Subtask 2: Implement calculation for new metrics/plots in `run_benchmark_test`.** [TODO]
-    *   **[Developer] Subtask 3: Add new plots (Confusion Matrix, ROC Curve, MD Scatter) to the benchmark results UI in `app.py`.** [OPEN]
+    *   **[Developer] Subtask 2: Implement calculation for new metrics/plots in `run_benchmark_test`.** [DONE]
+    *   **[Developer] Subtask 3: Add new plots (Confusion Matrix, ROC Curve, MD Scatter) to the benchmark results UI in `app.py`.** [TODO]
     *   **[QA/Expert] Subtask 4: Add unit tests for the new metric calculations.** [OPEN]
