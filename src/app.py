@@ -118,28 +118,198 @@ elif page_selection == "ベンチマーク":
     dataset_root_path = Path("bench") / selected_benchmark_dataset
     
     with st.expander("解析設定 (ベンチマーク用)", expanded=True):
-        # ...
-        benchmark_analysis_config = AnalysisConfig(quantity=SignalQuantity.ACCEL, window=WindowFunction.HANNING)
+        col_ana1, col_ana2 = st.columns(2)
+        with col_ana1:
+            benchmark_quantity = st.selectbox("物理量種別", list(SignalQuantity), format_func=lambda x: x.value, key="benchmark_quantity")
+            benchmark_window = st.selectbox("窓関数", list(WindowFunction), format_func=lambda x: x.value, key="benchmark_window")
+        with col_ana2:
+            # Assuming a fixed fs for benchmark, or derived from dataset
+            # For simplicity, using dummy fs to prevent errors for nyquist calculation
+            dummy_fs = 48000 
+            benchmark_hpf = st.number_input("HPF (Hz)", 0.0, float(dummy_fs/2), 10.0, key="benchmark_hpf")
+            benchmark_lpf = st.number_input("LPF (Hz)", 0.0, float(dummy_fs/2), float(dummy_fs/2), key="benchmark_lpf")
+            benchmark_order = st.number_input("フィルタ次数", 1, 10, 4, key="benchmark_order")
+        
+        benchmark_analysis_config = AnalysisConfig(
+            quantity=benchmark_quantity, 
+            window=benchmark_window,
+            highpass_hz=float(benchmark_hpf), 
+            lowpass_hz=float(benchmark_lpf), 
+            filter_order=benchmark_order
+        )
 
     with st.expander("MT法設定 (ベンチマーク用)", expanded=True):
-        benchmark_anomaly_threshold = st.number_input("異常判定閾値 (MD)", 0.1, 10.0, 3.0)
-        optimize_threshold_checkbox = st.checkbox("異常判定閾値を自動で最適化する (F1スコア基準)")
-        benchmark_mt_config = MTConfig(anomaly_threshold=benchmark_anomaly_threshold)
+        benchmark_anomaly_threshold = st.number_input("異常判定閾値 (MD)", 0.1, 10.0, 3.0, key="benchmark_anomaly_threshold")
+        benchmark_min_samples = st.number_input("最小正常サンプル数 (単位空間構築)", 1, 50, 10, key="benchmark_min_samples")
+        benchmark_recommended_samples = st.number_input("推奨正常サンプル数", 10, 100, 30, key="benchmark_recommended_samples")
+        optimize_threshold_checkbox = st.checkbox("異常判定閾値を自動で最適化する (F1スコア基準)", key="benchmark_optimize_threshold", help="有効にすると、テストデータを用いてF1スコアが最大になるように異常判定閾値を自動で探索します。")
+        
+        benchmark_mt_config = MTConfig(
+            anomaly_threshold=benchmark_anomaly_threshold,
+            min_samples=benchmark_min_samples,
+            recommended_samples=benchmark_recommended_samples
+        )
 
+    # NR Plugin Configuration (reusing existing UI elements)
+    with st.expander("ノイズ除去プラグイン設定 (ベンチマーク用)", expanded=True):
+        # Get available plugins and add a "None" option
+        available_plugins_benchmark = plugin_manager.list_plugins()
+        plugin_options_benchmark = {plugin.get_display_name(): plugin for plugin in available_plugins_benchmark}
+        plugin_options_benchmark["None"] = None
+        
+        selected_plugin_name_benchmark = st.selectbox(
+            "ノイズ除去アルゴリズム",
+            options=list(plugin_options_benchmark.keys()),
+            key="nr_plugin_selector_benchmark"
+        )
+        
+        selected_plugin_benchmark = plugin_options_benchmark[selected_plugin_name_benchmark]
+        benchmark_plugin_params = {}
+        benchmark_plugin_conf_name = None
+        benchmark_nr_plugin_config = None
+
+        if selected_plugin_benchmark:
+            benchmark_plugin_conf_name = selected_plugin_benchmark.get_name()
+            st.markdown(f"**{selected_plugin_benchmark.get_display_name()} 設定**")
+            for param in selected_plugin_benchmark.get_parameters():
+                if param.param_type == "number_input":
+                    benchmark_plugin_params[param.name] = st.number_input(
+                        label=param.label,
+                        min_value=param.min_value,
+                        value=param.default,
+                        help=param.help_text,
+                        key=f"nr_benchmark_{benchmark_plugin_conf_name}_{param.name}"
+                    )
+                elif param.param_type == "slider":
+                    benchmark_plugin_params[param.name] = st.slider(
+                        label=param.label,
+                        min_value=param.min_value,
+                        max_value=param.max_value,
+                        value=param.default,
+                        help=param.help_text,
+                        key=f"nr_benchmark_{benchmark_plugin_conf_name}_{param.name}"
+                    )
+            benchmark_nr_plugin_config = {
+                "name": benchmark_plugin_conf_name,
+                "params": benchmark_plugin_params
+            }
+        
     benchmark_config = BenchmarkConfig(
         dataset_name=selected_benchmark_dataset,
         analysis_config=benchmark_analysis_config,
         mt_config=benchmark_mt_config,
-        optimize_threshold=optimize_threshold_checkbox
+        optimize_threshold=optimize_threshold_checkbox,
+        nr_plugin_config=benchmark_nr_plugin_config
     )
 
-    if st.button("ベンチマークを実行"):
-        with st.spinner("ベンチマーク処理中..."):
-            result = run_benchmark_test(benchmark_config, dataset_root_path)
-        st.success("ベンチマークが完了しました！")
-        if result.optimized_threshold is not None:
-            st.metric("最適化された異常判定閾値", f"{result.optimized_threshold:.4f}")
-        # ... (rest of results display)
+    if st.button("ベンチマークを実行", key="run_benchmark_button"):
+        st.info("ベンチマークを実行中...しばらくお待ちください。")
+        try:
+            with st.spinner("ベンチマーク処理中..."):
+                benchmark_result = run_benchmark_test(benchmark_config, dataset_root_path)
+            st.success("ベンチマークが完了しました！")
+
+            st.subheader("ベンチマーク結果概要")
+            
+            if benchmark_result.optimized_threshold is not None:
+                st.metric("最適化された異常判定閾値", f"{benchmark_result.optimized_threshold:.4f}")
+            else:
+                st.metric("使用された異常判定閾値", f"{benchmark_result.benchmark_config.mt_config.anomaly_threshold:.4f}")
+
+
+            col_res1, col_res2, col_res3, col_res4 = st.columns(4)
+            col_res1.metric("精度 (Accuracy)", f"{benchmark_result.accuracy:.2%}")
+            col_res2.metric("適合率 (Precision)", f"{benchmark_result.precision:.2%}")
+            col_res3.metric("再現率 (Recall)", f"{benchmark_result.recall:.2%}")
+            col_res4.metric("F1スコア", f"{benchmark_result.f1_score:.2f}")
+
+            st.markdown("##### 分類レポート")
+            st.code(benchmark_result.classification_report)
+            
+            # Confusion Matrix
+            if benchmark_result.confusion_matrix:
+                st.markdown("##### 混同行列")
+                cm_labels = ['normal', 'anomaly']
+                cm_fig = go.Figure(data=go.Heatmap(
+                       z=benchmark_result.confusion_matrix,
+                       x=cm_labels,
+                       y=cm_labels,
+                       colorscale='Blues',
+                       colorbar={"title": "Count"}))
+                cm_fig.update_layout(
+                    xaxis_title="予測ラベル",
+                    yaxis_title="実測ラベル",
+                    height=400, margin=dict(l=20,r=20,t=40,b=20),
+                    yaxis=dict(autorange="reversed") # To show 'anomaly' at top
+                )
+                # Add text annotations
+                for i in range(len(cm_labels)):
+                    for j in range(len(cm_labels)):
+                        cm_fig.add_annotation(
+                            x=cm_labels[j],
+                            y=cm_labels[i],
+                            text=str(benchmark_result.confusion_matrix[i][j]),
+                            showarrow=False,
+                            font=dict(color="black")
+                        )
+                st.plotly_chart(cm_fig, use_container_width=True)
+
+            # ROC Curve
+            if benchmark_result.roc_curve and benchmark_result.roc_auc is not None:
+                st.markdown("##### ROC曲線")
+                roc_fig = go.Figure()
+                roc_fig.add_trace(go.Scatter(x=benchmark_result.roc_curve['fpr'], y=benchmark_result.roc_curve['tpr'], mode='lines', name=f'ROC (AUC = {benchmark_result.roc_auc:.2f})'))
+                roc_fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode='lines', name='Random Classifier', line=dict(dash='dash')))
+                roc_fig.update_layout(xaxis_title="偽陽性率 (FPR)", yaxis_title="真陽性率 (TPR)", height=400, margin=dict(l=20,r=20,t=40,b=20))
+                st.plotly_chart(roc_fig, use_container_width=True)
+
+            # Mahalanobis Distance Scatter Plot
+            if benchmark_result.file_results:
+                st.markdown("##### マハラノビス距離分布")
+                md_df = pd.DataFrame([
+                    {'md': f.mahalanobis_distance, 'label': f.actual_label, 'predicted': f.predicted_label}
+                    for f in benchmark_result.file_results
+                ])
+                md_fig = go.Figure()
+                # Use a specific y-coordinate for each label for better visualization
+                md_df['y_coord'] = md_df['label'].apply(lambda x: 0 if x == 'normal' else 1)
+
+                md_fig.add_trace(go.Scatter(
+                    x=md_df[md_df['label'] == 'normal']['md'],
+                    y=md_df[md_df['label'] == 'normal']['y_coord'],
+                    mode='markers',
+                    name='正常データ',
+                    marker=dict(color='blue', size=8, opacity=0.7)
+                ))
+                md_fig.add_trace(go.Scatter(
+                    x=md_df[md_df['label'] == 'anomaly']['md'],
+                    y=md_df[md_df['label'] == 'anomaly']['y_coord'],
+                    mode='markers',
+                    name='異常データ',
+                    marker=dict(color='red', size=8, opacity=0.7)
+                ))
+                
+                # Add threshold line if optimized or set
+                threshold_to_plot = benchmark_result.optimized_threshold if benchmark_result.optimized_threshold is not None else benchmark_result.benchmark_config.mt_config.anomaly_threshold
+                md_fig.add_shape(type="line", x0=threshold_to_plot, y0=-0.5, x1=threshold_to_plot, y1=1.5,
+                                 line=dict(color="green", width=2, dash="dash"),
+                                 name="判定閾値")
+                md_fig.update_layout(
+                    xaxis_title="マハラノビス距離 (MD)",
+                    yaxis_title="ラベル (0: 正常, 1: 異常)",
+                    yaxis=dict(tickvals=[0, 1], ticktext=['正常', '異常'], range=[-0.5, 1.5], showgrid=False),
+                    height=400, margin=dict(l=20,r=20,t=40,b=20),
+                    showlegend=True
+                )
+                st.plotly_chart(md_fig, use_container_width=True)
+
+
+            st.markdown("---")
+            st.subheader("ベンチマーク構成 (監査用)")
+            st.json(asdict(benchmark_result.benchmark_config))
+
+        except Exception as e:
+            st.error(f"ベンチマーク実行中にエラーが発生しました: {e}")
 
 elif page_selection == "合成データ生成":
     # ... (code for this page)
