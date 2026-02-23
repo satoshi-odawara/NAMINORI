@@ -37,7 +37,7 @@ page_selection = st.sidebar.radio(
     key="page_selector"
 )
 
-elif page_selection == "通常解析":
+if page_selection == "通常解析":
     # --- Main Application ---
     # Combined file uploader for WAV and CSV
     uploaded_file = st.file_uploader("評価用WAVまたはCSVファイルをアップロード", type=["wav", "csv"], key="evaluation_uploader")
