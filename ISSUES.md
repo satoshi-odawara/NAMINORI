@@ -79,6 +79,6 @@
 - [ ] ISSUE-057: [Architect] Implement CSV Input Data Support [IN PROGRESS]
     *   **[Architect] Subtask 1: Define CSV Data Structure & Parsing Strategy.** [DONE]
     *   **[Developer] Subtask 2: Implement CSV Parsing Logic.** [DONE]
-    *   **[Developer] Subtask 3: Integrate CSV Input into UI.** [TODO]
-    *   **[QA/Expert] Subtask 4: Add Unit Tests for CSV Parsing.** [OPEN]
+    *   **[Developer] Subtask 3: Integrate CSV Input into UI.** [DONE]
+    *   **[QA/Expert] Subtask 4: Add Unit Tests for CSV Parsing.** [TODO]
     *   **[Documentation] Subtask 5: Update User Guide for CSV Input.** [OPEN]

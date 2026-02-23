@@ -37,21 +37,91 @@ page_selection = st.sidebar.radio(
     key="page_selector"
 )
 
-if page_selection == "通常解析":
+elif page_selection == "通常解析":
     # --- Main Application ---
-    uploaded_file = st.file_uploader("評価用WAVファイルをアップロード", type=["wav"], key="evaluation_uploader")
+    # Combined file uploader for WAV and CSV
+    uploaded_file = st.file_uploader("評価用WAVまたはCSVファイルをアップロード", type=["wav", "csv"], key="evaluation_uploader")
+
+    data_raw = None
+    fs_hz = None
+    file_hash = None
+    tmp_file_path = None
 
     if uploaded_file:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+        file_extension = uploaded_file.name.split('.')[-1].lower()
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_extension}") as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             tmp_file_path = tmp_file.name
-
-        st.audio(uploaded_file, format="audio/wav")
-
+        
+        # Display audio player for WAV files
+        if file_extension == "wav":
+            st.audio(uploaded_file, format="audio/wav")
+        
         try:
-            fs_hz, data_raw, file_hash = load_wav_file(tmp_file_path)
-            st.write(f"ファイル名: {uploaded_file.name}, サンプリング周波数: {fs_hz} Hz, データ長: {len(data_raw) / fs_hz:.2f} 秒")
+            if file_extension == "wav":
+                fs_hz, data_raw, file_hash = load_wav_file(tmp_file_path)
+            elif file_extension == "csv":
+                st.sidebar.header("CSV解析設定")
+                csv_df_preview = pd.read_csv(tmp_file_path)
+                
+                # Automatically detect potential data and timestamp columns
+                potential_numeric_cols = csv_df_preview.select_dtypes(include=np.number).columns.tolist()
+                potential_datetime_cols = csv_df_preview.select_dtypes(include='datetime').columns.tolist()
+                
+                # Check for columns that look like timestamps but are objects
+                for col in csv_df_preview.columns:
+                    if csv_df_preview[col].dtype == 'object':
+                        try:
+                            pd.to_datetime(csv_df_preview[col], errors='raise')
+                            potential_datetime_cols.append(col)
+                        except:
+                            pass
+                
+                default_data_col = potential_numeric_cols[0] if potential_numeric_cols else csv_df_preview.columns[0]
+                default_timestamp_col = potential_datetime_cols[0] if potential_datetime_cols else None
 
+                data_column = st.sidebar.selectbox(
+                    "加速度データ列を選択",
+                    options=csv_df_preview.columns.tolist(),
+                    index=csv_df_preview.columns.tolist().index(default_data_col),
+                    key="csv_data_column"
+                )
+                
+                use_timestamp = st.sidebar.checkbox("タイムスタンプ列を使用する", value=bool(default_timestamp_col), key="csv_use_timestamp")
+
+                timestamp_column = None
+                input_sampling_frequency_hz = None
+
+                if use_timestamp:
+                    timestamp_column = st.sidebar.selectbox(
+                        "タイムスタンプ列を選択",
+                        options=csv_df_preview.columns.tolist(),
+                        index=csv_df_preview.columns.tolist().index(default_timestamp_col) if default_timestamp_col else 0,
+                        key="csv_timestamp_column"
+                    )
+                else:
+                    input_sampling_frequency_hz = st.sidebar.number_input(
+                        "サンプリング周波数 (Hz) を入力",
+                        min_value=1.0, value=1000.0, step=1.0,
+                        key="csv_sampling_frequency"
+                    )
+
+                st.sidebar.markdown("---")
+                st.sidebar.subheader("CSVプレビュー")
+                st.sidebar.dataframe(csv_df_preview.head())
+
+                data_raw, fs_hz = csv_parser.parse_csv_data(
+                    Path(tmp_file_path),
+                    data_column=data_column,
+                    sampling_frequency_hz=input_sampling_frequency_hz,
+                    timestamp_column=timestamp_column
+                )
+                file_hash = f"csv_hash_{uploaded_file.name}_{data_column}" # Simple hash for CSV
+
+            st.write(f"ファイル名: {uploaded_file.name}, サンプリング周波数: {fs_hz} Hz, データ長: {len(data_raw) / fs_hz:.2f} 秒")
+            
+            # --- Analysis Configuration (same as before) ---
             st.sidebar.header("評価用データ解析設定")
             quantity = st.sidebar.selectbox("物理量種別", list(SignalQuantity), format_func=lambda x: x.value, key="eval_quantity")
             window = st.sidebar.selectbox("窓関数", list(WindowFunction), format_func=lambda x: x.value, key="eval_window")
@@ -109,6 +179,8 @@ if page_selection == "通常解析":
         finally:
             if os.path.exists(tmp_file_path):
                 os.remove(tmp_file_path)
+
+
 
 elif page_selection == "ベンチマーク":
     st.header("ベンチマーク テスト")
