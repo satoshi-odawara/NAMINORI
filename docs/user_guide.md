@@ -16,11 +16,23 @@ Open the provided local URL (e.g., `http://localhost:8501`) in your web browser.
 
 ## 2. Uploading Data
 
-The application supports vibration data in WAV file format (LPCM 16/24/32bit).
+The application supports vibration data from both WAV files (LPCM 16/24/32bit) and CSV files.
 
-*   **To upload a file:** Click the "評価用WAVファイルをアップロード" (Upload WAV file for evaluation) button in the main content area and select your `.wav` file.
+*   **To upload a file:** Click the "評価用WAVまたはCSVファイルをアップロード" (Upload WAV or CSV file for evaluation) button in the main content area and select your `.wav` or `.csv` file.
+
+### For WAV Files:
 *   The application will display the file name, sampling frequency (Fs), and duration of the loaded data.
 *   An audio player will also appear, allowing you to listen to the uploaded file.
+
+### For CSV Files:
+When a CSV file is uploaded, a new section "CSV解析設定" (CSV Parsing Settings) will appear in the sidebar, providing options to configure how the data is interpreted:
+*   **加速度データ列を選択 (Select Acceleration Data Column):** Choose the column from your CSV file that contains the vibration (acceleration) data. The application will attempt to pre-select a suitable numeric column.
+*   **タイムスタンプ列を使用する (Use Timestamp Column):** Check this box if your CSV file contains a column with timestamps.
+    *   **タイムスタンプ列を選択 (Select Timestamp Column):** If the above box is checked, choose the column containing your timestamp information. The application supports various datetime formats, including ISO 8601 (e.g., `YYYY-MM-DD HH:MM:SS.sss`) and Unix timestamps (seconds or milliseconds since epoch). The sampling frequency will be automatically inferred from these timestamps.
+    *   **サンプリング周波数 (Hz) を入力 (Enter Sampling Frequency (Hz)):** If you choose *not* to use a timestamp column, you must manually input the sampling frequency of your data in Hertz.
+*   **CSVプレビュー (CSV Preview):** The sidebar will also show a preview of the first few rows of your CSV file to help you verify column selections.
+
+The application will display the file name, inferred or specified sampling frequency (Fs), and duration of the loaded data. If inconsistent sampling intervals are detected when using a timestamp column, a warning will be issued, and an average frequency will be used.
 
 ## 3. Analysis Settings
 
