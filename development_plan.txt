@@ -143,3 +143,19 @@ All initial development phases, including core backend refactoring, MT method im
 *   **Adherence to `GEMINI.md`:** All implementations must strictly follow the conventions, physical validity principles and quality standards outlined in `GEMINI.md`.
 *   **Version Control:** Utilize Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`) for clear commit history.
 *   **Autonomous Operation:** Where specifications are ambiguous, make design decisions based on physical validity and leave comments/logs to explain the rationale.
+---
+
+## Phase 12: Extended Input Data Formats
+
+**Objective:** Enhance the application to support additional input data formats, starting with CSV files for acceleration data, providing flexible options for timestamp handling and sampling frequency.
+
+**Estimated Duration:** 3-4 weeks
+
+**Tasks:**
+
+1.  **[Architect] Define CSV Data Structure & Parsing Strategy (`ISSUE-057`):** IN PROGRESS
+    *   **[Architect] Subtask 1: Define CSV Data Structure & Parsing Strategy.** [TODO]
+    *   **[Developer] Subtask 2: Implement CSV Parsing Logic.** [OPEN]
+    *   **[Developer] Subtask 3: Integrate CSV Input into UI.** [OPEN]
+    *   **[QA/Expert] Subtask 4: Add Unit Tests for CSV Parsing.** [OPEN]
+    *   **[Documentation] Subtask 5: Update User Guide for CSV Input.** [OPEN]
