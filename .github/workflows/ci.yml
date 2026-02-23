@@ -13,4 +13,5 @@ jobs:
       - run: pip install -r requirements.txt
       - run: pytest --cov=src --cov-report=xml
       - run: pytest tests/test_app_syntax.py
+      - run: pytest tests/test_app_startup.py
       - run: ruff check src/
