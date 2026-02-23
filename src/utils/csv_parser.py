@@ -28,13 +28,18 @@ def parse_csv_data(
     if data_column not in df.columns:
         raise ValueError(f"Data column '{data_column}' not found in CSV file.")
 
-    acceleration_data = df[data_column].to_numpy()
+    acceleration_data = df[data_column]
 
     if timestamp_column:
         if timestamp_column not in df.columns:
             raise ValueError(f"Timestamp column '{timestamp_column}' not found in CSV file.")
         
-        timestamps = pd.to_datetime(df[timestamp_column], errors='coerce')
+        # Determine if it's a Unix timestamp (numeric) or datetime string
+        if pd.api.types.is_numeric_dtype(df[timestamp_column]):
+            timestamps = pd.to_datetime(df[timestamp_column], unit='s', errors='coerce')
+        else:
+            timestamps = pd.to_datetime(df[timestamp_column], errors='coerce')
+
         if timestamps.isnull().any():
             raise ValueError("Could not parse all timestamps. Check format or missing values.")
         
@@ -67,6 +72,11 @@ def parse_csv_data(
                 raise ValueError("Non-numeric data found in acceleration column after conversion.")
         except ValueError:
             raise ValueError("Acceleration data column contains non-numeric values.")
+    else:
+        acceleration_data = acceleration_data.to_numpy() # Convert Series to numpy array if it was numeric initially
+
+    if acceleration_data.size == 0:
+        raise ValueError("No acceleration data found in the specified column.")
 
     return acceleration_data, actual_sampling_frequency_hz
 
