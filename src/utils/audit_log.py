@@ -30,3 +30,16 @@ def save_audit_log(result: AnalysisResult, path: str):
     
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+def get_serializable_audit_log(res: AnalysisResult) -> dict:
+    """
+    Converts an AnalysisResult object to a dictionary suitable for JSON serialization,
+    handling Enum conversions.
+    """
+    log_data = asdict(res)
+    # Ensure Enum values are converted to their string representations for serialization
+    if 'config' in log_data and 'quantity' in log_data['config']:
+        log_data['config']['quantity'] = res.config.quantity.value
+    if 'config' in log_data and 'window' in log_data['config']:
+        log_data['config']['window'] = res.config.window.value
+    return log_data
