@@ -98,3 +98,7 @@
     *   **[Developer] Subtask 2: Update AnalysisConfig model and signal processing bypass logic.** [DONE]
     *   **[Developer] Subtask 3: Update app.py UI with toggle checkboxes (default OFF).** [DONE]
     *   **[QA/Expert] Subtask 4: Verify filtering bypass correctness.** [DONE]
+- [x] ISSUE-062: [Architect] 視覚的解析機能（生波形/FFT/スペクトログラム）のUI設計とデータフローの定義 [CLOSED]
+- [x] ISSUE-063: [Developer] 通常解析ページへの生波形およびFFTインタラクティブチャートの追加 [CLOSED]
+- [x] ISSUE-064: [Developer] スペクトログラム表示機能の実装とプラグイン・ベンチマークとの整合性確保 [CLOSED]
+- [x] ISSUE-065: [QA/Expert] 物理量種別に応じた軸ラベルの動的変更と描画パフォーマンスのレビュー [CLOSED]

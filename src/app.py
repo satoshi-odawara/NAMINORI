@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 from src.core.models import SignalQuantity, AnalysisConfig, WindowFunction, VibrationFeatures, QualityMetrics
-from src.core.feature_extraction import calculate_time_domain_features, calculate_fft_features
+from src.core.feature_extraction import calculate_time_domain_features, calculate_fft_features, calculate_spectrogram
 from src.core.quality_check import calculate_quality_metrics, get_confidence_score
 from src.diagnostics.mt_method import MTSpace
 from src.utils.audit_log import AnalysisResult, get_serializable_audit_log
@@ -47,6 +47,7 @@ if page_selection == "通常解析":
     fs_hz = None
     file_hash = None
     tmp_file_path = None
+    column_data_map = None
 
     if uploaded_file:
         file_extension = uploaded_file.name.split('.')[-1].lower()
@@ -93,9 +94,18 @@ if page_selection == "通常解析":
                 )
                 
                 synthesize = False
+                main_axis_col = None
                 if len(data_columns) > 1:
                     synthesize = st.sidebar.toggle("多軸合成を行う (合成ベクトル加速度)", value=True, key="csv_synthesize", 
                                                    help="物理的妥当性に基づき、各軸のDCオフセット（重力等）を除去した後に合成加速度 sqrt(X^2 + Y^2 + Z^2) を計算します。")
+                    
+                    if not synthesize:
+                        main_axis_col = st.sidebar.selectbox(
+                            "解析対象とするメインの軸を選択",
+                            options=data_columns,
+                            key="csv_main_axis_selection",
+                            help="選択した軸のデータが特徴量抽出および異常診断（MT法）の対象となります。他の軸は参考としてグラフ表示されます。"
+                        )
 
                 use_timestamp = st.sidebar.checkbox("タイムスタンプ列を使用する", value=bool(potential_datetime_cols), key="csv_use_timestamp")
 
@@ -130,14 +140,21 @@ if page_selection == "通常解析":
                     st.error("解析対象の列を少なくとも1つ選択してください。")
                     st.stop()
 
-                data_raw, fs_hz = csv_parser.parse_csv_data(
+                data_raw, fs_hz, column_data_map = csv_parser.parse_csv_data(
                     Path(tmp_file_path),
                     data_columns=data_columns,
                     sampling_frequency_hz=input_sampling_frequency_hz,
                     timestamp_column=timestamp_column,
                     synthesize=synthesize
                 )
-                col_info = "+".join(data_columns) if synthesize else data_columns[0]
+                
+                # If synthesize is off and user picked a main axis, override data_raw
+                if not synthesize and main_axis_col and column_data_map and main_axis_col in column_data_map:
+                    data_raw = column_data_map[main_axis_col]
+                    col_info = main_axis_col
+                else:
+                    col_info = "+".join(data_columns) if synthesize else data_columns[0]
+                
                 file_hash = f"csv_hash_{uploaded_file.name}_{col_info}" # Simple hash for CSV
 
             st.write(f"ファイル名: {uploaded_file.name}, サンプリング周波数: {fs_hz} Hz, データ長: {len(data_raw) / fs_hz:.2f} 秒")
@@ -160,6 +177,11 @@ if page_selection == "通常解析":
             top_n_peaks = st.sidebar.slider("ピーク表示数", 1, 20, 5, key="peak_count")
             min_peak_height_percent = st.sidebar.slider("最小ピーク高さ（最大値に対する%）", 0, 100, 10, key="peak_height")
             peak_distance_hz = st.sidebar.slider("ピーク最小距離（Hz）", 1, 100, 10, key="peak_distance")
+
+            st.sidebar.header("表示設定")
+            fft_log_x = st.sidebar.checkbox("FFT周波数軸を対数にする", value=False, key="fft_log_x")
+            show_raw_signal = st.sidebar.checkbox("生信号(DC除去のみ)を表示する", value=True, key="show_raw_signal")
+            spec_nperseg = st.sidebar.select_slider("スペクトログラム解像度 (Window Size)", options=[128, 256, 512, 1024, 2048], value=512, key="spec_nperseg")
 
             config = AnalysisConfig(
                 quantity=quantity, 
@@ -190,7 +212,7 @@ if page_selection == "通常解析":
 
             all_features = VibrationFeatures(**asdict(time_features), **freq_features)
 
-            col1, col2 = st.columns([1, 2])
+            col1, col2 = st.columns([1, 3])
             with col1:
                 st.subheader("時間領域 特徴量")
                 st.metric(f"RMS ({unit})", f"{all_features.rms:.3f}")
@@ -213,7 +235,125 @@ if page_selection == "通常解析":
                     md = st.session_state.mt_space.calculate_md(all_features)
                     md_color = "green" if md < 3.0 else "orange" if md < 5.0 else "red"
                     st.markdown(f'#### MT法診断 (MD): <span style="color:{md_color};">{md:.2f}</span>', unsafe_allow_html=True)
-            # ... (rest of the page)
+            
+            with col2:
+                tab1, tab2, tab3 = st.tabs(["🕒 時間領域 (波形比較)", "📊 周波数領域 (FFT)", "🌈 時間-周波数領域 (スペクトログラム)"])
+                
+                # Dynamic downsampling for performance
+                MAX_POINTS = 10000
+                
+                with tab1:
+                    st.subheader("時間領域波形")
+                    time_axis = np.arange(len(processed)) / fs_hz
+                    
+                    # Performance optimization: Downsample for visualization if data is too large
+                    if len(processed) > MAX_POINTS:
+                        step = len(processed) // MAX_POINTS
+                        plot_time = time_axis[::step]
+                        plot_processed = processed[::step]
+                        plot_raw_dc = processed_dc_removed[::step]
+                        st.warning(f"データ長が大きいため、描画用に {len(processed)} 点から {len(plot_processed)} 点へダウンサンプリングしました。")
+                    else:
+                        plot_time = time_axis
+                        plot_processed = processed
+                        plot_raw_dc = processed_dc_removed
+
+                    fig_time = go.Figure()
+                    
+                    if show_raw_signal:
+                        if column_data_map:
+                            for col_name, col_arr in column_data_map.items():
+                                # Remove DC for visualization if it's raw data
+                                p_col_arr = col_arr[::step] if len(col_arr) > MAX_POINTS else col_arr
+                                fig_time.add_trace(go.Scatter(x=plot_time, y=p_col_arr - np.mean(col_arr), mode='lines', name=f'軸: {col_name} (DC除去)', opacity=0.4))
+                        else:
+                            fig_time.add_trace(go.Scatter(x=plot_time, y=plot_raw_dc, mode='lines', name='生信号 (DC除去のみ)', line=dict(color='rgba(150, 150, 150, 0.4)')))
+                    
+                    fig_time.add_trace(go.Scatter(x=plot_time, y=plot_processed, mode='lines', name='解析対象信号 (フィルタ後)', line=dict(color='blue', width=2)))
+                    
+                    fig_time.update_layout(
+                        xaxis_title="時間 (s)",
+                        yaxis_title=f"振幅 ({unit})",
+                        height=500,
+                        margin=dict(l=20, r=20, t=20, b=20),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
+                    st.plotly_chart(fig_time, use_container_width=True)
+
+                with tab2:
+                    st.subheader("FFT スペクトル")
+                    
+                    # FFT usually has fewer points than time domain, but we can still limit it
+                    if len(mags) > MAX_POINTS:
+                        step_f = len(mags) // MAX_POINTS
+                        plot_freqs = freqs[::step_f]
+                        plot_mags = mags[::step_f]
+                    else:
+                        plot_freqs = freqs
+                        plot_mags = mags
+
+                    fig_fft = go.Figure()
+                    
+                    # Add component FFTs if available
+                    if column_data_map:
+                        for col_name, col_arr in column_data_map.items():
+                            f_comp, m_comp, _ = calculate_fft_features(col_arr - np.mean(col_arr), fs_hz, config.window)
+                            if len(m_comp) > MAX_POINTS:
+                                f_comp = f_comp[::len(m_comp)//MAX_POINTS]
+                                m_comp = m_comp[::len(m_comp)//MAX_POINTS]
+                            fig_fft.add_trace(go.Scatter(x=f_comp, y=m_comp, mode='lines', name=f'軸: {col_name}', opacity=0.4))
+
+                    fig_fft.add_trace(go.Scatter(x=plot_freqs, y=plot_mags, mode='lines', name='解析対象信号', line=dict(color='blue', width=2)))
+                    
+                    # Peak Annotation (only for the main processed signal)
+                    peaks, _ = find_peaks(mags, height=max(mags) * min_peak_height_percent / 100, distance=peak_distance_hz * (len(freqs) / (fs_hz/2)))
+                    sorted_peaks = peaks[np.argsort(mags[peaks])][::-1][:top_n_peaks]
+                    
+                    for p in sorted_peaks:
+                        fig_fft.add_annotation(
+                            x=freqs[p], y=mags[p],
+                            text=f"{freqs[p]:.1f}Hz<br>{mags[p]:.3f}{unit}",
+                            showarrow=True, arrowhead=1,
+                            ax=0, ay=-40
+                        )
+                    
+                    fig_fft.update_layout(
+                        xaxis_title="周波数 (Hz)",
+                        yaxis_title=f"振幅 ({unit})",
+                        xaxis_type="log" if fft_log_x else "linear",
+                        height=500,
+                        margin=dict(l=20, r=20, t=20, b=20),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
+                    st.plotly_chart(fig_fft, use_container_width=True)
+
+                with tab3:
+                    st.subheader("スペクトログラム")
+                    spec_f, spec_t, Sxx = calculate_spectrogram(processed, fs_hz, config.window, nperseg=spec_nperseg)
+                    
+                    # Convert to dB for visualization
+                    # Use a small epsilon to avoid log(0)
+                    Sxx_db = 10 * np.log10(Sxx + 1e-12)
+                    
+                    fig_spec = go.Figure(data=go.Heatmap(
+                        x=spec_t, y=spec_f, z=Sxx_db,
+                        colorscale='Viridis',
+                        colorbar=dict(title=f"Power (dB rel. {unit}^2/Hz)")
+                    ))
+                    
+                    filter_status = f"HPF:{config.highpass_hz}Hz " if config.hpf_enabled else ""
+                    filter_status += f"LPF:{config.lowpass_hz}Hz" if config.lpf_enabled else ""
+                    if not filter_status: filter_status = "None"
+
+                    fig_spec.update_layout(
+                        title=f"Spectrogram (Window: {config.window.value}, Size: {spec_nperseg}, Filter: {filter_status})",
+                        xaxis_title="時間 (s)",
+                        yaxis_title="周波数 (Hz)",
+                        yaxis_type="log" if fft_log_x else "linear",
+                        height=500,
+                        margin=dict(l=20, r=20, t=40, b=20)
+                    )
+                    st.plotly_chart(fig_spec, use_container_width=True)
 
         except Exception as e:
             st.error(f"解析エラー: {e}")

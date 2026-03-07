@@ -68,6 +68,39 @@ def calculate_spectral_features(freq_hz: np.ndarray, magnitude: np.ndarray) -> d
     }
 
 
+def calculate_spectrogram(
+    data: np.ndarray,
+    fs_hz: int,
+    window_type: WindowFunction,
+    nperseg: int = 512
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Calculates the spectrogram of a signal.
+
+    Args:
+        data: Input signal (NumPy array).
+        fs_hz: Sampling frequency in Hz.
+        window_type: Type of window function to apply.
+        nperseg: Length of each segment for STFT. Default is 512.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, np.ndarray]:
+            - f: Array of sample frequencies.
+            - t: Array of segment times.
+            - Sxx: Spectrogram of data (power spectral density).
+    """
+    if window_type == WindowFunction.HANNING:
+        window = 'hann'
+    else:  # FLATTOP
+        window = 'flattop'
+
+    # Ensure nperseg is not longer than the data itself
+    nperseg_actual = min(len(data), nperseg)
+    
+    f, t, Sxx = signal.spectrogram(data, fs_hz, window=window, nperseg=nperseg_actual, noverlap=nperseg_actual // 2)
+    
+    return f, t, Sxx
+
 def calculate_fft_features(
     data: np.ndarray,
     fs_hz: int,

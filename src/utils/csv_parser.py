@@ -31,7 +31,7 @@ def parse_csv_data(
     sampling_frequency_hz: Optional[float] = None,
     timestamp_column: Optional[str] = None,
     synthesize: bool = False
-) -> Tuple[np.ndarray, float]:
+) -> Tuple[np.ndarray, float, Optional[dict[str, np.ndarray]]]:
     """
     Parses a CSV file containing vibration data from one or more columns.
 
@@ -44,9 +44,10 @@ def parse_csv_data(
                     sqrt(sum(col^2)) after removing DC offset from each.
 
     Returns:
-        Tuple[np.ndarray, float]:
+        Tuple[np.ndarray, float, Optional[dict[str, np.ndarray]]]:
             - acceleration_data: NumPy array of acceleration values (possibly synthesized).
             - actual_sampling_frequency_hz: Actual or inferred sampling frequency.
+            - column_data_map: Dictionary mapping column names to their original arrays (if multiple columns).
     """
     df = pd.read_csv(file_path, skipinitialspace=True)
 
@@ -93,6 +94,7 @@ def parse_csv_data(
     
     # Process data columns
     processed_arrays = []
+    column_data_map = {}
     for col in data_columns:
         col_data = df[col]
         # Ensure numeric
@@ -109,6 +111,7 @@ def parse_csv_data(
             raise ValueError(f"No data found in column '{col}'.")
         
         processed_arrays.append(arr)
+        column_data_map[col] = arr
 
     if synthesize and len(processed_arrays) > 1:
         # Physical validity: Remove DC (bias/gravity) from each axis before synthesis
@@ -119,5 +122,5 @@ def parse_csv_data(
         # If not synthesizing or only one column, take the first one
         acceleration_data = processed_arrays[0]
 
-    return acceleration_data, actual_sampling_frequency_hz
+    return acceleration_data, actual_sampling_frequency_hz, column_data_map if len(column_data_map) > 1 else None
 
