@@ -1,178 +1,140 @@
-# Vibration Analysis Web Application Development Plan
+# 振動解析Webアプリケーション 開発計画書
 
-This document outlines the development plan for the vibration analysis web application, based on the `GEMINI.md` technical charter. The goal is to facilitate collaborative development and ensure adherence to project standards, focusing on physical validity, reproducibility, and extensibility.
-
----
-
-## Phase 1-4: Core Implementation & Testing - COMPLETED
-All initial development phases, including core backend refactoring, MT method implementation, Streamlit UI creation, and comprehensive testing, are complete. The project is in a stable state.
+本ドキュメントは、`GEMINI.md` 技術憲章に基づき、振動解析Webアプリケーションの開発計画を概説するものである。物理的妥当性、再現性、および拡張性に重点を置き、円滑な共同開発とプロジェクト基準の遵守を目的とする。
 
 ---
 
-## Phase 5: Pluggable Noise Reduction Framework
-
-**Objective:** Refactor the noise reduction logic to support custom, user-defined algorithms via a pluggable architecture, enhancing system extensibility.
-
-**Estimated Duration:** 2-3 weeks
-
-**Tasks:**
-
-1.  **[Architect] Design Pluggable Framework (`ISSUE-021`):** COMPLETED
-2.  **[Developer] Implement Backend (`ISSUE-022`):** COMPLETED
-3.  **[Developer] Update Streamlit UI (`ISSUE-023`):** COMPLETED
-4.  **[Documentation] Create User Guide (`ISSUE-028`):** COMPLETED
-
-## Phase 6: Noise Reduction Evaluation Framework
-
-**Objective:** Implement a framework to objectively measure and visualize the effectiveness of any applied noise reduction filter, providing users with immediate, data-driven feedback.
-
-**Estimated Duration:** 2-3 weeks
-
-**Tasks:**
-
-1.  **[Architect] Design Evaluation Metrics (`ISSUE-024`):** COMPLETED
-2.  **[Developer] Implement Evaluation Backend (`ISSUE-025`):** COMPLETED
-3.  **[Developer] Implement Evaluation UI (`ISSUE-026`):** COMPLETED
-
-## Phase 7: Final Testing & Validation
-
-**Objective:** Ensure the quality, stability, and correctness of the new pluggable and evaluation frameworks.
-
-**Estimated Duration:** 1 week
-
-**Tasks:**
-
-1.  **[QA/Expert] Add Comprehensive Tests (`ISSUE-027`):** COMPLETED
+## フェーズ 1-4: コア機能の実装とテスト - 完了
+バックエンドのリファクタリング、MT法の追加、Streamlit UIの作成、および包括的なテストを含む初期開発フェーズはすべて完了。プロジェクトは安定した状態にある。
 
 ---
 
-## Phase 8: Documentation Enhancement
+## フェーズ 5: プラグイン式ノイズ除去フレームワーク
 
-**Objective:** Provide comprehensive and up-to-date documentation for the application, covering usage, plugin development, and technical architecture.
+**目的:** ノイズ除去ロジックをリファクタリングし、プラグインアーキテクチャを通じてユーザー定義のカスタムアルゴリズムをサポートすることで、システムの拡張性を向上させる。
 
-**Estimated Duration:** 2-3 weeks
+**タスク:**
 
-**Tasks:**
+1.  **[Architect] プラグインフレームワークの設計 (`ISSUE-021`):** 完了
+2.  **[Developer] バックエンドの実装 (`ISSUE-022`):** 完了
+3.  **[Developer] Streamlit UIの更新 (`ISSUE-023`):** 完了
+4.  **[Documentation] ユーザーガイドの作成 (`ISSUE-028`):** 完了
 
-1.  **[Architect] Design Documentation Structure (`ISSUE-029`):** COMPLETED
-2.  **[Developer] Update `README.md` (`ISSUE-030`):** COMPLETED
-3.  **[Developer] Create User Guide (`ISSUE-031`):** COMPLETED
-4.  **[Developer] Move `PLUGINS.md` to `docs/` and integrate (`ISSUE-032`):** COMPLETED
-5.  **[Developer] Document Evaluation Framework (`ISSUE-033`):** COMPLETED
-6.  **[Architect] Create Technical Architecture Overview (`ISSUE-034`):** COMPLETED
-7.  **[QA/Expert] Review and Verify Documentation (`ISSUE-035`):** COMPLETED
+## フェーズ 6: ノイズ除去評価フレームワーク
 
----
+**目的:** 適用されたノイズ除去フィルタの効果を客観的に測定・可視化するフレームワークを実装し、ユーザーにデータに基づいた即時のフィードバックを提供する。
 
-## Phase 9: Spectral Subtraction Noise Reduction
+**タスク:**
 
-**Objective:** Implement a novel noise reduction algorithm based on spectral subtraction, learning noise profiles from normal data.
+1.  **[Architect] 評価指標の設計 (`ISSUE-024`):** 完了
+2.  **[Developer] 評価バックエンドの実装 (`ISSUE-025`):** 完了
+3.  **[Developer] Streamlitでの評価UI実装 (`ISSUE-026`):** 完了
 
-**Estimated Duration:** 3-4 weeks
+## フェーズ 7: 最終テストと検証
 
-**Tasks:**
+**目的:** 新しいプラグインおよび評価フレームワークの品質、安定性、および正確性を確保する。
 
-1.  **[Architect] Design Spectral Subtraction Algorithm and Data Flow (`ISSUE-036`):** COMPLETED
-2.  **[Developer] Implement Spectral Subtraction Plugin (Backend) (`ISSUE-037`):** COMPLETED
-3.  **[Developer] Implement Noise Profile Learning in MTSpace (`ISSUE-038`):** COMPLETED
-4.  **[Developer] Update Streamlit UI for Noise Profile Configuration (`ISSUE-039`):** COMPLETED
-5.  **[QA/Expert] Add Unit Tests for Spectral Subtraction Plugin (`ISSUE-040`):** COMPLETED
-6.  **[QA/Expert] Add Integration/Regression Tests for Spectral Subtraction (`ISSUE-041`):** COMPLETED
-7.  **[Documentation] Document Spectral Subtraction Plugin (`ISSUE-042`):** COMPLETED
+**タスク:**
+
+1.  **[QA/Expert] 包括的なテストの追加 (`ISSUE-027`):** 完了
 
 ---
 
-## Phase 10: Benchmarking Framework
+## フェーズ 8: ドキュメントの拡充
 
-**Objective:** Implement a robust framework for evaluating the application's performance using benchmark datasets, providing quantitative metrics and reproducible results.
+**目的:** アプリケーションの使用方法、プラグイン開発、および技術アーキテクチャをカバーする、包括的で最新のドキュメントを提供する。
 
-**Estimated Duration:** 3-4 weeks
+**タスク:**
 
-**Tasks:**
-
-1.  **[Architect] Design Benchmarking Framework and Data Structure (`ISSUE-043`):** COMPLETED
-2.  **[Developer] Implement Benchmarking Backend Logic (`ISSUE-044`):** COMPLETED
-3.  **[Developer] Update `MTSpace` for Noise Profile Learning during Benchmark (`ISSUE-045`):** COMPLETED
-4.  **[Developer] Implement Benchmarking UI in Streamlit (`ISSUE-046`):** COMPLETED
-5.  **[QA/Expert] Add Unit/Integration Tests for Benchmarking (`ISSUE-047`):** COMPLETED
-6.  **[QA/Expert] Add Regression Tests for Benchmarking Results (`ISSUE-048`):** COMPLETED
-7.  **[Documentation] Document Benchmarking Feature (`ISSUE-049`):** COMPLETED
-8.  **[Architect] Define Standard Directory Structure for Self-Generated/Synthetic Benchmarking Datasets (`ISSUE-050`):** COMPLETED
+1.  **[Architect] ドキュメント構造の設計 (`ISSUE-029`):** 完了
+2.  **[Developer] `README.md` の更新 (`ISSUE-030`):** 完了
+3.  **[Developer] ユーザーガイドの作成 (`ISSUE-031`):** 完了
+4.  **[Developer] `PLUGINS.md` を `docs/` に移動して統合 (`ISSUE-032`):** 完了
+5.  **[Developer] 評価フレームワークのドキュメント化 (`ISSUE-033`):** 完了
+6.  **[Architect] 技術アーキテクチャ概要の作成 (`ISSUE-034`):** 完了
+7.  **[QA/Expert] ドキュメントのレビューと検証 (`ISSUE-035`):** 完了
 
 ---
 
-## Phase 11: Performance Evaluation & Robustness Enhancement
+## フェーズ 9: スペクトルサブトラクション法によるノイズ除去
 
-**Objective:** Systematically evaluate the current system's performance against more complex datasets, identify limitations, and implement enhancements for improved robustness and diagnostic capabilities.
+**目的:** 正常データからノイズプロファイルを学習し、スペクトルサブトラクションに基づいた新しいノイズ除去アルゴリズムを実装する。
 
-**Estimated Duration:** 4-6 weeks
+**タスク:**
 
-**Tasks:**
-
-1.  **[Architect] Integrate DCASE 2020 Challenge Task 2 for Benchmarking (`ISSUE-051`):** COMPLETED
-    *   **[Architect] Subtask 1: Design DCASE Data Preparation/Transformation Strategy.** (Completed)
-    *   **[Developer] Subtask 2: Implement a Python script to download and pre-process the DCASE 2020 "pump" development dataset.** (Completed)
-    *   **[Developer] Subtask 3: Modify `run_benchmark_test` in `benchmarking.py` to recursively find and run benchmarks for all machine ID subdirectories within the given `dataset_root` if such subdirectories exist.** (Completed)
-    *   **[QA/Expert] Subtask 4: Add unit/integration tests for DCASE data handling and benchmark execution.** (Completed)
-2.  **[Developer] Enhance Synthetic Data Generation for Complex Scenarios (`ISSUE-052`):** COMPLETED
-    *   **[Architect] Subtask 1: Design `synthetic_data_generator.py` module and API for complex signals (AM/FM, impulses).** (Completed)
-    *   **[Developer] Subtask 2: Implement core generation functions in `synthetic_data_generator.py`.** (Completed)
-    *   **[Developer] Subtask 3: Create a Streamlit UI for interactive synthetic data generation and download.** (Completed)
-    *   **[QA/Expert] Subtask 4: Add unit tests for `synthetic_data_generator.py`.** (Completed)
-3.  **[QA/Expert] Benchmark MT Method Robustness with Varied Noise Levels and Types (`ISSUE-053`):** COMPLETED
-4.  **[Architect] Explore and Integrate Advanced Feature Extraction Techniques (`ISSUE-054`):** COMPLETED
-    *   **[Architect] Subtask 1: Update `VibrationFeatures` dataclass in `models.py` with new spectral features (centroid, spread, entropy).** (Completed)
-    *   **[Developer] Subtask 2: Implement `calculate_spectral_features` in `feature_extraction.py`.** (Completed)
-    *   **[Developer] Subtask 3: Update dependencies (`benchmarking.py`, etc.) to handle new features.** (Completed)
-    *   **[QA/Expert] Subtask 4: Add unit tests for `calculate_spectral_features`.** (Completed)
-5.  **[Developer] Implement Automated Anomaly Threshold Optimization in Benchmarking (`ISSUE-055`):** COMPLETED
-    *   **[Architect] Subtask 1: Add `optimized_threshold` field to `BenchmarkResult` dataclass in `models.py`.** (Completed)
-    *   **[Developer] Subtask 2: Implement threshold optimization logic in `run_benchmark_test` function.** (Completed)
-    *   **[Developer] Subtask 3: Add UI controls for threshold optimization in `app.py`.** (Completed)
-    *   **[QA/Expert] Subtask 4: Add unit tests for the optimization logic.** (Completed)
-6.  **[Developer] Enhance Benchmarking Report Generation with Plots and Detailed Metrics (`ISSUE-056`):** COMPLETED
-    *   **[Architect] Subtask 1: Add fields for confusion matrix and ROC curve data to `BenchmarkResult` dataclass.** (Completed)
-    *   **[Developer] Subtask 2: Implement calculation for new metrics/plots in `run_benchmark_test`.** (Completed)
-    *   **[Developer] Subtask 3: Add new plots (Confusion Matrix, ROC Curve, MD Scatter) to the benchmark results UI in `app.py`.** (Completed)
-    *   **[QA/Expert] Subtask 4: Add unit tests for the new metric calculations.** (Completed)
+1.  **[Architect] アルゴリズムとデータフローの設計 (`ISSUE-036`):** 完了
+2.  **[Developer] プラグインの実装（バックエンド） (`ISSUE-037`):** 完了
+3.  **[Developer] MTSpaceでのノイズプロファイル学習の実装 (`ISSUE-038`):** 完了
+4.  **[Developer] UIの更新（プロファイル設定） (`ISSUE-039`):** 完了
+5.  **[QA/Expert] 単体テストの追加 (`ISSUE-040`):** 完了
+6.  **[QA/Expert] 統合・回帰テストの追加 (`ISSUE-041`):** 完了
+7.  **[Documentation] プラグインのドキュメント化 (`ISSUE-042`):** 完了
 
 ---
 
-## General Guidelines:
+## フェーズ 10: ベンチマークフレームワーク
 
-*   **Adherence to `GEMINI.md`:** All implementations must strictly follow the conventions, physical validity principles and quality standards outlined in `GEMINI.md`.
-*   **Version Control:** Utilize Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`) for clear commit history.
-*   **Autonomous Operation:** Where specifications are ambiguous, make design decisions based on physical validity and leave comments/logs to explain the rationale.
+**目的:** 標準データセットを使用してアプリケーションの性能を評価するための堅牢なフレームワークを実装し、定量的指標と再現可能な結果を提供する。
+
+**タスク:**
+
+1.  **[Architect] フレームワークとデータ構造の設計 (`ISSUE-043`):** 完了
+2.  **[Developer] ベンチマーク実行ロジックの実装 (`ISSUE-044`):** 完了
+3.  **[Developer] ベンチマーク中のノイズ学習対応 (`ISSUE-045`):** 完了
+4.  **[Developer] StreamlitでのベンチマークUI実装 (`ISSUE-046`):** 完了
+5.  **[QA/Expert] 単体・統合テストの追加 (`ISSUE-047`):** 完了
+6.  **[QA/Expert] 結果の回帰テスト追加 (`ISSUE-048`):** 完了
+7.  **[Documentation] 機能のドキュメント化 (`ISSUE-049`):** 完了
+8.  **[Architect] 合成ベンチマークデータのディレクトリ構造定義 (`ISSUE-050`):** 完了
 
 ---
 
-## Phase 12: Extended Input Data Formats
+## フェーズ 11: 性能評価と堅牢性の向上
 
-**Objective:** Enhance the application to support additional input data formats, starting with CSV files for acceleration data, providing flexible options for timestamp handling and sampling frequency.
+**目的:** より複雑なデータセットに対してシステムの性能を体系的に評価し、限界を特定した上で、堅牢性と診断能力を向上させるための機能強化を実施する。
 
-**Estimated Duration:** 3-4 weeks
+**タスク:**
 
-**Tasks:**
+1.  **[Architect] DCASE 2020 Challenge Task 2 の統合 (`ISSUE-051`):** 完了
+2.  **[Developer] 複雑なシナリオ向けの合成データ生成の強化 (`ISSUE-052`):** 完了
+3.  **[QA/Expert] 様々なノイズ環境でのMT法の堅牢性評価 (`ISSUE-053`):** 完了
+4.  **[Architect] 高度な特徴量抽出技術の統合 (スペクトル重心等) (`ISSUE-054`):** 完了
+5.  **[Developer] ベンチマークにおける異常判定閾値の自動最適化 (`ISSUE-055`):** 完了
+6.  **[Developer] ROC曲線や混同行列を含む詳細なレポート機能の強化 (`ISSUE-056`):** 完了
 
-1.  **[Architect] Define CSV Data Structure & Parsing Strategy (`ISSUE-057`):** IN PROGRESS
-    *   **[Architect] Subtask 1: Define CSV Data Structure & Parsing Strategy.** [TODO]
-    *   **[Developer] Subtask 2: Implement CSV Parsing Logic.** [OPEN]
-    *   **[Developer] Subtask 3: Integrate CSV Input into UI.** [OPEN]
-    *   **[QA/Expert] Subtask 4: Add Unit Tests for CSV Parsing.** [OPEN]
-    *   **[Documentation] Subtask 5: Update User Guide for CSV Input.** [OPEN]
 ---
 
-## Phase 12: Extended Input Data Formats
+## フェーズ 12: 入力データ形式の拡張
 
-**Objective:** Enhance the application to support additional input data formats, starting with CSV files for acceleration data, providing flexible options for timestamp handling and sampling frequency.
+**目的:** CSVファイル等、WAV以外の入力形式をサポートし、タイムスタンプ処理やサンプリング周波数の設定に柔軟性を持たせる。
 
-**Estimated Duration:** 3-4 weeks
+**タスク:**
 
-**Tasks:**
+1.  **[Architect] CSVデータ構造とパース戦略の定義 (`ISSUE-057`):** 完了
+    *   **[Developer] サブタスク 2: CSVパースロジックの実装。** [完了]
+    *   **[Developer] サブタスク 3: UIへのCSV入力の統合。** [完了]
+    *   **[QA/Expert] サブタスク 4: CSVパースの単体テスト追加。** [完了]
+    *   **[Documentation] サブタスク 5: ユーザーガイドの更新。** [完了]
 
-1.  **[Architect] Define CSV Data Structure & Parsing Strategy (`ISSUE-057`):** IN PROGRESS
-    *   **[Architect] Subtask 1: Define CSV Data Structure & Parsing Strategy.** [TODO]
-    *   **[Developer] Subtask 2: Implement CSV Parsing Logic.** [OPEN]
-    *   **[Developer] Subtask 3: Integrate CSV Input into UI.** [OPEN]
-    *   **[QA/Expert] Subtask 4: Add Unit Tests for CSV Parsing.** [OPEN]
-    *   **[Documentation] Subtask 5: Update User Guide for CSV Input.** [OPEN]
+---
+
+## フェーズ 13: 高度なCSV処理と多軸サポート
+
+**目的:** 多軸（3軸）振動データの合成サポートおよびインテリジェントな列選択ロジックを実装し、利便性と物理的妥当性を向上させる。
+
+**タスク:**
+
+1.  **[Architect] 高度なCSV処理の設計 (`ISSUE-059`):** 完了
+    *   **[Architect] サブタスク 1: 多軸合成ロジックと列名推論戦略の定義。** [完了]
+    *   **[Developer] サブタスク 2: `csv_parser.py` の拡張（複数列・ベクトル合成）。** [完了]
+    *   **[Developer] サブタスク 3: Streamlit UIの強化（複数選択・プレビュー）。** [完了]
+    *   **[QA/Expert] サブタスク 4: 実データによる検証と監査ログの一貫性確保。** [完了]
+
+---
+
+## 一般指針:
+
+*   **`GEMINI.md` の遵守:** すべての実装は、`GEMINI.md` に定められた規約、物理的妥当性の原則、および品質基準に厳格に従うこと。
+*   **言語設定:** `development_plan.txt` および `ISSUES.md` の解説、コミットメッセージの要約等には、日本語を優先して使用すること。
+*   **バージョン管理:** 意味のある単位で Conventional Commits を使用し、明確な履歴を残すこと。
+*   **自律運用:** 仕様が曖昧な場合は、物理的な妥当性に基づきエンジニアとして最善の判断を下し、その根拠をログに残すこと。
