@@ -13,7 +13,7 @@ def calculate_quality_metrics(
     Calculates various data quality metrics.
 
     Args:
-        data: Input signal (NumPy array, typically normalized).
+        data: Input signal (NumPy array).
         fs_hz: Sampling frequency in Hz.
         rms: RMS value of the signal.
         magnitude: FFT magnitude array.
@@ -21,7 +21,24 @@ def calculate_quality_metrics(
     Returns:
         QualityMetrics: Object containing calculated quality metrics.
     """
-    clipping_ratio = np.sum(np.abs(data) >= 0.99) / len(data)
+    # Detect if the data is likely normalized (WAV) or raw physical values
+    max_abs = np.max(np.abs(data))
+    
+    # If data is within ~1.0, it's likely normalized (WAV)
+    # If it significantly exceeds 1.0, it's likely physical units (m/s^2, etc.)
+    if max_abs <= 1.05:
+        threshold = 0.99
+    else:
+        # For physical units, we don't know the sensor's range easily, 
+        # but we can check for values staying at the exact same max/min for multiple samples.
+        # As a heuristic, if 90% of max is exceeded and it's very large, we might warn,
+        # but to avoid false positives for physical data, we use a much higher threshold 
+        # or disable it if we can't be sure of the range.
+        # Here we'll use a heuristic: if values are within a typical sensor range (e.g. 20G),
+        # we don't call it clipping unless it's near the very peak of the observed data.
+        threshold = max_abs * 0.999 
+
+    clipping_ratio = np.sum(np.abs(data) >= threshold) / len(data) if max_abs > 0 else 0
 
     # S/N比推定（簡易版） - from GEMINI.md
     signal_power = rms**2

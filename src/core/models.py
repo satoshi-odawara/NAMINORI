@@ -41,6 +41,18 @@ class AnalysisConfig:
 
 
 @dataclass
+class AnalysisPreset:
+    """解析条件のプリセット設定"""
+    name: str
+    config: AnalysisConfig
+    top_n_peaks: int = 5
+    min_peak_height_percent: float = 10.0
+    peak_distance_hz: float = 10.0
+    fft_log_x: bool = False
+    show_raw_signal: bool = True
+    spec_nperseg: int = 512
+
+@dataclass
 class QualityMetrics:
     """データ品質評価"""
     clipping_ratio: float  # クリッピング率

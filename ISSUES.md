@@ -102,3 +102,7 @@
 - [x] ISSUE-063: [Developer] 通常解析ページへの生波形およびFFTインタラクティブチャートの追加 [CLOSED]
 - [x] ISSUE-064: [Developer] スペクトログラム表示機能の実装とプラグイン・ベンチマークとの整合性確保 [CLOSED]
 - [x] ISSUE-065: [QA/Expert] 物理量種別に応じた軸ラベルの動的変更と描画パフォーマンスのレビュー [CLOSED]
+- [x] ISSUE-066: [Architect] 解析プリセット機能（設備別設定の保存・呼出）のUI/UX設計 [CLOSED]
+- [x] ISSUE-067: [Developer] 解析プリセットの永続化ロジックとStreamlit UIの実装 [CLOSED]
+- [x] ISSUE-068: [Developer] 複数ファイル一括アップロードと診断サマリー一覧表示の実装 [CLOSED]
+- [x] ISSUE-069: [QA/Expert] プリセット適用時のUI状態整合性と大量ファイル処理の安定性検証 [CLOSED]
