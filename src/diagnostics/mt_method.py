@@ -58,7 +58,7 @@ class MTSpace:
         Updates the mean vector, inverse covariance matrix, and averaged noise power spectrum
         if enough normal samples are available.
         """
-        if len(self.normal_samples_vectors) < self.min_samples:
+        if len(self.normal_samples_vectors) == 0:
             self.mean_vector = None
             self.inverse_covariance_matrix = None
             self.is_provisional = True
@@ -66,6 +66,15 @@ class MTSpace:
             return
 
         feature_vectors = np.array(self.normal_samples_vectors)
+        num_features = feature_vectors.shape[1] # Number of features in VibrationFeatures
+
+        if len(self.normal_samples_vectors) <= num_features: # Need more samples than features for a non-singular cov matrix
+            print(f"Warning: Insufficient normal samples ({len(self.normal_samples_vectors)}) for stable covariance matrix estimation (need >{num_features} samples). Consider increasing 'min_samples'.")
+            self.mean_vector = None
+            self.inverse_covariance_matrix = None
+            self.is_provisional = True
+            self.noise_power_spectrum_avg = None
+            return
 
         # Calculate mean vector
         self.mean_vector = np.mean(feature_vectors, axis=0)
@@ -76,6 +85,7 @@ class MTSpace:
         try:
             self.inverse_covariance_matrix = np.linalg.inv(covariance_matrix)
         except np.linalg.LinAlgError:
+            print("Warning: Covariance matrix is singular. Applying regularization.")
             regularization_term = np.identity(covariance_matrix.shape[0]) * 1e-9
             self.inverse_covariance_matrix = np.linalg.inv(covariance_matrix + regularization_term)
 
@@ -85,7 +95,6 @@ class MTSpace:
         if self.individual_normal_power_spectra:
             self.noise_power_spectrum_avg = np.mean(self.individual_normal_power_spectra, axis=0)
             self.individual_normal_power_spectra.clear() # Clear to save memory
-
 
     def calculate_md(self, features: VibrationFeatures) -> float:
         """
@@ -104,7 +113,7 @@ class MTSpace:
         x = features.to_vector()
         diff = x - self.mean_vector
         md_squared = diff.T @ self.inverse_covariance_matrix @ diff
-        return np.sqrt(md_squared)
+        return np.sqrt(np.maximum(0, md_squared))
 
     def get_status(self) -> str:
         """

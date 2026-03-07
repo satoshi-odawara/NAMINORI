@@ -81,16 +81,15 @@ def run_benchmark_test(benchmark_config: BenchmarkConfig, dataset_root_path: Pat
     for machine_dir in machine_id_dirs:
         print(f"--- Processing Machine Directory: {machine_dir.name} ---")
         
-        train_normal_dir = machine_dir / "train" / "normal"
-        test_normal_dir = machine_dir / "test" / "normal"
-        test_anomaly_dir = machine_dir / "test" / "anomaly"
+        train_dir = machine_dir / "train"
+        test_dir = machine_dir / "test"
 
-        train_normal_files = list(train_normal_dir.rglob("*.wav"))
-        test_normal_files = list(test_normal_dir.rglob("*.wav"))
-        test_anomaly_files = list(test_anomaly_dir.rglob("*.wav"))
+        train_normal_files = list(train_dir.rglob("normal*.wav"))
+        test_normal_files = list(test_dir.rglob("normal*.wav"))
+        test_anomaly_files = list(test_dir.rglob("anomaly*.wav"))
 
         if not train_normal_files:
-            print(f"Warning: No normal training files found in {train_normal_dir}. Skipping machine {machine_dir.name}.")
+            print(f"Warning: No normal training files found in {train_dir}. Skipping machine {machine_dir.name}.")
             continue
         if not test_normal_files and not test_anomaly_files:
             print(f"Warning: No test files found in {machine_dir / 'test'}. Skipping machine {machine_dir.name}.")
