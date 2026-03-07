@@ -148,8 +148,12 @@ if page_selection == "通常解析":
             window = st.sidebar.selectbox("窓関数", list(WindowFunction), format_func=lambda x: x.value, key="eval_window")
             
             nyquist = fs_hz / 2
-            hpf = st.sidebar.number_input("HPF (Hz)", 0.0, nyquist, 10.0, key="eval_hpf")
-            lpf = st.sidebar.number_input("LPF (Hz)", 0.0, nyquist, nyquist, key="eval_lpf")
+            hpf_enabled = st.sidebar.checkbox("HPF有効", value=False, key="eval_hpf_enabled")
+            hpf = st.sidebar.number_input("HPF (Hz)", 0.0, nyquist, 10.0, key="eval_hpf", disabled=not hpf_enabled)
+            
+            lpf_enabled = st.sidebar.checkbox("LPF有効", value=False, key="eval_lpf_enabled")
+            lpf = st.sidebar.number_input("LPF (Hz)", 0.0, nyquist, nyquist, key="eval_lpf", disabled=not lpf_enabled)
+            
             order = st.sidebar.number_input("フィルタ次数", 1, 10, 4, key="eval_order")
             
             st.sidebar.header("FFTピーク設定")
@@ -157,7 +161,15 @@ if page_selection == "通常解析":
             min_peak_height_percent = st.sidebar.slider("最小ピーク高さ（最大値に対する%）", 0, 100, 10, key="peak_height")
             peak_distance_hz = st.sidebar.slider("ピーク最小距離（Hz）", 1, 100, 10, key="peak_distance")
 
-            config = AnalysisConfig(quantity=quantity, window=window, highpass_hz=float(hpf), lowpass_hz=float(lpf), filter_order=order)
+            config = AnalysisConfig(
+                quantity=quantity, 
+                window=window, 
+                highpass_hz=float(hpf) if hpf_enabled else None, 
+                lowpass_hz=float(lpf) if lpf_enabled else None, 
+                filter_order=order,
+                hpf_enabled=hpf_enabled,
+                lpf_enabled=lpf_enabled
+            )
             
             processed_dc_removed = remove_dc_offset(data_raw)
             processed = apply_butterworth_filter(processed_dc_removed, fs_hz, config.highpass_hz, config.lowpass_hz, config.filter_order)

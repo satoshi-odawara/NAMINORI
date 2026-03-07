@@ -93,3 +93,8 @@
     *   **[Developer] Subtask 2: Implement explicit NaN detection and standardized error handling in `csv_parser.py`.** [DONE]
     *   **[QA/Expert] Subtask 3: Add comprehensive test cases for multi-axis synthesis, inference, and various edge cases (NaN, inconsistent rows).** [DONE]
     *   **[QA/Expert] Subtask 4: Verify all 18 test cases pass.** [DONE]
+- [x] ISSUE-061: [Architect] Implement Toggleable HPF/LPF and change defaults to OFF [CLOSED]
+    *   **[Architect] Subtask 1: Update GEMINI.md policy.** [DONE]
+    *   **[Developer] Subtask 2: Update AnalysisConfig model and signal processing bypass logic.** [DONE]
+    *   **[Developer] Subtask 3: Update app.py UI with toggle checkboxes (default OFF).** [DONE]
+    *   **[QA/Expert] Subtask 4: Verify filtering bypass correctness.** [DONE]

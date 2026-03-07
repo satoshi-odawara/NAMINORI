@@ -32,6 +32,8 @@ class AnalysisConfig:
     highpass_hz: Optional[float] = None
     lowpass_hz: Optional[float] = None
     filter_order: int = 4
+    hpf_enabled: bool = False
+    lpf_enabled: bool = False
     
     # New pluggable noise reduction settings
     noise_reduction_plugin_name: Optional[str] = None

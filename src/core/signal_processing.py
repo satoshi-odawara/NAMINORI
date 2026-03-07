@@ -70,33 +70,32 @@ def apply_butterworth_filter(
 
     Returns:
         np.ndarray: Filtered signal.
-
-    Raises:
-        ValueError: If both highpass_hz and lowpass_hz are None, or if cutoff frequencies are invalid.
     """
     nyquist = 0.5 * fs_hz
 
-    if highpass_hz is None and lowpass_hz is None:
-        return data  # No filter specified
+    # Filter bypassing if None or 0
+    is_hpf = highpass_hz is not None and highpass_hz > 0
+    is_lpf = lowpass_hz is not None and lowpass_hz > 0
 
+    if not is_hpf and not is_lpf:
+        return data
+
+    # Validation for Physical Validity
     if highpass_hz is not None and highpass_hz >= nyquist:
         raise ValueError(f"High-pass cutoff frequency ({highpass_hz} Hz) must be below Nyquist frequency ({nyquist} Hz).")
     if lowpass_hz is not None and lowpass_hz >= nyquist:
         raise ValueError(f"Low-pass cutoff frequency ({lowpass_hz} Hz) must be below Nyquist frequency ({nyquist} Hz).")
-    if highpass_hz is not None and lowpass_hz is not None and highpass_hz >= lowpass_hz:
-        raise ValueError("High-pass cutoff frequency must be less than low-pass cutoff frequency for band-pass filter.")
 
-    if highpass_hz is not None and lowpass_hz is not None:
-        # Band-pass filter
-        freq_cutoff = [highpass_hz, lowpass_hz] # Use absolute frequencies
+    if is_hpf and is_lpf:
+        if highpass_hz >= lowpass_hz:
+            raise ValueError("High-pass cutoff frequency must be less than low-pass cutoff frequency for band-pass filter.")
+        freq_cutoff = [highpass_hz, lowpass_hz]
         btype = 'band'
-    elif highpass_hz is not None:
-        # High-pass filter
-        freq_cutoff = highpass_hz # Use absolute frequency
+    elif is_hpf:
+        freq_cutoff = highpass_hz
         btype = 'high'
-    else:
-        # Low-pass filter
-        freq_cutoff = lowpass_hz # Use absolute frequency
+    else: # is_lpf
+        freq_cutoff = lowpass_hz
         btype = 'low'
 
     sos = signal.butter(order, freq_cutoff, btype=btype, fs=fs_hz, output='sos')
