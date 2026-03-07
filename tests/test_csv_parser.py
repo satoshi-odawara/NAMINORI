@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from src.utils.csv_parser import parse_csv_data
+from src.utils.csv_parser import parse_csv_data, infer_vibration_columns
 
 # Fixture to create dummy CSV files
 @pytest.fixture
@@ -74,7 +74,7 @@ abc
 3.0
 """
     file_path = create_dummy_csv("data.csv", content)
-    with pytest.raises(ValueError, match="Acceleration data column contains non-numeric values"):
+    with pytest.raises(ValueError, match="Non-numeric or NaN data found in column 'accel_data'"):
         parse_csv_data(file_path, "accel_data", sampling_frequency_hz=100.0)
 
 def test_parse_csv_no_sf_and_no_timestamp(create_dummy_csv):
@@ -126,7 +126,7 @@ def test_parse_csv_empty_file(create_dummy_csv):
 def test_parse_csv_only_headers(create_dummy_csv):
     content = "accel_data"
     file_path = create_dummy_csv("headers.csv", content)
-    with pytest.raises(ValueError, match="No acceleration data found in the specified column."):
+    with pytest.raises(ValueError, match="No data found in column 'accel_data'"):
         parse_csv_data(file_path, "accel_data", sampling_frequency_hz=100.0)
 
 def test_parse_csv_with_leading_spaces_in_header(create_dummy_csv):
@@ -136,3 +136,64 @@ def test_parse_csv_with_leading_spaces_in_header(create_dummy_csv):
     data, fs = parse_csv_data(file_path, "accel_data", sampling_frequency_hz=1.0)
     np.testing.assert_array_almost_equal(data, np.array([1.0, 2.0]))
     assert fs == 1.0
+
+def test_parse_csv_multi_axis_synthesis(create_dummy_csv):
+    # 3-axis data with different DC offsets
+    # x: sin + 10.0 DC
+    # y: cos + 5.0 DC
+    # z: 0.0 + 2.0 DC (static)
+    t = np.arange(0, 1, 0.1)
+    x = np.sin(2 * np.pi * 1 * t) + 10.0
+    y = np.cos(2 * np.pi * 1 * t) + 5.0
+    z = np.zeros_like(t) + 2.0
+    
+    df = pd.DataFrame({'x': x, 'y': y, 'z': z})
+    file_path = create_dummy_csv("multi_axis.csv", df.to_csv(index=False))
+    
+    # Synthesize should remove DC offsets (10, 5, 2) and return sqrt(sin^2 + cos^2 + 0^2) = 1.0
+    data, fs = parse_csv_data(file_path, data_columns=['x', 'y', 'z'], sampling_frequency_hz=10.0, synthesize=True)
+    
+    np.testing.assert_array_almost_equal(data, np.ones_like(t), decimal=5)
+    assert fs == 10.0
+
+def test_parse_csv_with_nan_values(create_dummy_csv):
+    content = """accel_data
+1.0
+NaN
+3.0
+"""
+    file_path = create_dummy_csv("data_nan.csv", content)
+    with pytest.raises(ValueError, match="Non-numeric or NaN data found in column 'accel_data'"):
+        parse_csv_data(file_path, "accel_data", sampling_frequency_hz=100.0)
+
+def test_parse_csv_inconsistent_row_length(create_dummy_csv):
+    # Pandas will typically pad with NaN or handle this, let's see how our numeric check behaves
+    content = """col1,col2
+1.0,2.0
+3.0
+4.0,5.0
+"""
+    file_path = create_dummy_csv("bad_rows.csv", content)
+    # col2 will have a NaN in the middle row
+    with pytest.raises(ValueError, match="Non-numeric or NaN data found in column 'col2'"):
+        parse_csv_data(file_path, "col2", sampling_frequency_hz=100.0)
+
+def test_infer_vibration_columns():
+    cols = ["timestamp", "X-axis", "Y-Axis", "Z_axis", "temp", "Other"]
+    inferred = infer_vibration_columns(cols)
+    assert "X-axis" in inferred
+    assert "Y-Axis" in inferred
+    assert "Z_axis" in inferred
+    assert "timestamp" not in inferred
+    assert "temp" not in inferred
+
+    cols = ["ch1", "CH2", "vibration_3", "accel_x", "vib_z"]
+    inferred = infer_vibration_columns(cols)
+    assert "ch1" in inferred
+    assert "CH2" in inferred
+    assert "accel_x" in inferred
+    assert "vib_z" in inferred
+
+def test_infer_vibration_columns_no_match():
+    cols = ["date", "time", "pressure", "humidity"]
+    assert infer_vibration_columns(cols) == []

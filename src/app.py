@@ -79,26 +79,35 @@ if page_selection == "通常解析":
                         except:
                             pass
                 
-                default_data_col = potential_numeric_cols[0] if potential_numeric_cols else csv_df_preview.columns[0]
-                default_timestamp_col = potential_datetime_cols[0] if potential_datetime_cols else None
+                # Intelligent column inference
+                detected_cols = csv_parser.infer_vibration_columns(csv_df_preview.columns.tolist())
+                
+                if not detected_cols:
+                    detected_cols = [potential_numeric_cols[0]] if potential_numeric_cols else [csv_df_preview.columns[0]]
 
-                data_column = st.sidebar.selectbox(
-                    "加速度データ列を選択",
+                data_columns = st.sidebar.multiselect(
+                    "加速度データ列を選択 (複数選択可)",
                     options=csv_df_preview.columns.tolist(),
-                    index=csv_df_preview.columns.tolist().index(default_data_col),
-                    key="csv_data_column"
+                    default=detected_cols,
+                    key="csv_data_columns"
                 )
                 
-                use_timestamp = st.sidebar.checkbox("タイムスタンプ列を使用する", value=bool(default_timestamp_col), key="csv_use_timestamp")
+                synthesize = False
+                if len(data_columns) > 1:
+                    synthesize = st.sidebar.toggle("多軸合成を行う (合成ベクトル加速度)", value=True, key="csv_synthesize", 
+                                                   help="物理的妥当性に基づき、各軸のDCオフセット（重力等）を除去した後に合成加速度 sqrt(X^2 + Y^2 + Z^2) を計算します。")
+
+                use_timestamp = st.sidebar.checkbox("タイムスタンプ列を使用する", value=bool(potential_datetime_cols), key="csv_use_timestamp")
 
                 timestamp_column = None
                 input_sampling_frequency_hz = None
 
                 if use_timestamp:
+                    default_timestamp_col = potential_datetime_cols[0] if potential_datetime_cols else csv_df_preview.columns[0]
                     timestamp_column = st.sidebar.selectbox(
                         "タイムスタンプ列を選択",
                         options=csv_df_preview.columns.tolist(),
-                        index=csv_df_preview.columns.tolist().index(default_timestamp_col) if default_timestamp_col else 0,
+                        index=csv_df_preview.columns.tolist().index(default_timestamp_col),
                         key="csv_timestamp_column"
                     )
                 else:
@@ -108,17 +117,28 @@ if page_selection == "通常解析":
                         key="csv_sampling_frequency"
                     )
 
+                if data_columns:
+                    st.sidebar.markdown("---")
+                    st.sidebar.subheader("選択列の統計量")
+                    st.sidebar.dataframe(csv_df_preview[data_columns].describe().transpose()[['mean', 'std', 'min', 'max']])
+
                 st.sidebar.markdown("---")
-                st.sidebar.subheader("CSVプレビュー")
+                st.sidebar.subheader("CSVプレビュー (Top 5)")
                 st.sidebar.dataframe(csv_df_preview.head())
+
+                if not data_columns:
+                    st.error("解析対象の列を少なくとも1つ選択してください。")
+                    st.stop()
 
                 data_raw, fs_hz = csv_parser.parse_csv_data(
                     Path(tmp_file_path),
-                    data_column=data_column,
+                    data_columns=data_columns,
                     sampling_frequency_hz=input_sampling_frequency_hz,
-                    timestamp_column=timestamp_column
+                    timestamp_column=timestamp_column,
+                    synthesize=synthesize
                 )
-                file_hash = f"csv_hash_{uploaded_file.name}_{data_column}" # Simple hash for CSV
+                col_info = "+".join(data_columns) if synthesize else data_columns[0]
+                file_hash = f"csv_hash_{uploaded_file.name}_{col_info}" # Simple hash for CSV
 
             st.write(f"ファイル名: {uploaded_file.name}, サンプリング周波数: {fs_hz} Hz, データ長: {len(data_raw) / fs_hz:.2f} 秒")
             
