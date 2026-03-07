@@ -84,7 +84,7 @@ def test_apply_butterworth_filter_hpf():
 
     # Apply HPF at 100 Hz
     hpf_cutoff = 100
-    filtered_data = signal_processing.apply_butterworth_filter(data, fs, highpass_hz=hpf_cutoff, lowpass_hz=None)
+    filtered_data = signal_processing.apply_butterworth_filter(data, fs, highpass_hz=hpf_cutoff, lowpass_hz=None, hpf_enabled=True)
 
     # Check that low frequency component is attenuated and high frequency remains
     assert np.std(filtered_data) < np.std(data) # Should attenuate something
@@ -92,9 +92,9 @@ def test_apply_butterworth_filter_hpf():
 
     # Check edge case: HPF at Nyquist or above should raise ValueError
     with pytest.raises(ValueError, match=rf"High-pass cutoff frequency \((\d+\.\d+) Hz\) must be below Nyquist frequency \((\d+\.\d+) Hz\)\."):
-        signal_processing.apply_butterworth_filter(data, fs, highpass_hz=nyquist)
+        signal_processing.apply_butterworth_filter(data, fs, highpass_hz=nyquist, hpf_enabled=True)
     with pytest.raises(ValueError, match=rf"High-pass cutoff frequency \((\d+\.\d+) Hz\) must be below Nyquist frequency \((\d+\.\d+) Hz\)\."):
-        signal_processing.apply_butterworth_filter(data, fs, highpass_hz=nyquist + 1)
+        signal_processing.apply_butterworth_filter(data, fs, highpass_hz=nyquist + 1, hpf_enabled=True)
 
 def test_apply_butterworth_filter_lpf():
     fs = 1000
@@ -107,7 +107,7 @@ def test_apply_butterworth_filter_lpf():
 
     # Apply LPF at 100 Hz
     lpf_cutoff = 100
-    filtered_data = signal_processing.apply_butterworth_filter(data, fs, highpass_hz=None, lowpass_hz=lpf_cutoff)
+    filtered_data = signal_processing.apply_butterworth_filter(data, fs, highpass_hz=None, lowpass_hz=lpf_cutoff, lpf_enabled=True)
 
     # Check that high frequency component is attenuated and low frequency remains
     assert np.std(filtered_data) < np.std(data) # Should attenuate something
@@ -115,9 +115,9 @@ def test_apply_butterworth_filter_lpf():
 
     # Check edge case: LPF at Nyquist or above should raise ValueError
     with pytest.raises(ValueError, match=rf"Low-pass cutoff frequency \((\d+\.\d+) Hz\) must be below Nyquist frequency \((\d+\.\d+) Hz\)\."):
-        signal_processing.apply_butterworth_filter(data, fs, lowpass_hz=nyquist)
+        signal_processing.apply_butterworth_filter(data, fs, lowpass_hz=nyquist, lpf_enabled=True)
     with pytest.raises(ValueError, match=rf"Low-pass cutoff frequency \((\d+\.\d+) Hz\) must be below Nyquist frequency \((\d+\.\d+) Hz\)\."):
-        signal_processing.apply_butterworth_filter(data, fs, lowpass_hz=nyquist + 1)
+        signal_processing.apply_butterworth_filter(data, fs, lowpass_hz=nyquist + 1, lpf_enabled=True)
 
 def test_apply_butterworth_filter_bpf():
     fs = 1000
@@ -130,7 +130,7 @@ def test_apply_butterworth_filter_bpf():
     # Apply BPF between 100 Hz and 200 Hz
     bpf_low = 100
     bpf_high = 200
-    filtered_data = signal_processing.apply_butterworth_filter(data, fs, highpass_hz=bpf_low, lowpass_hz=bpf_high)
+    filtered_data = signal_processing.apply_butterworth_filter(data, fs, highpass_hz=bpf_low, lowpass_hz=bpf_high, hpf_enabled=True, lpf_enabled=True)
 
     # Expect mid_freq component to be dominant
     assert np.std(filtered_data) < np.std(data) # Should attenuate something
@@ -138,11 +138,30 @@ def test_apply_butterworth_filter_bpf():
 
     # Check edge case: highpass_hz >= lowpass_hz for BPF
     with pytest.raises(ValueError, match="High-pass cutoff frequency must be less than low-pass cutoff frequency for band-pass filter."):
-        signal_processing.apply_butterworth_filter(data, fs, highpass_hz=150, lowpass_hz=100)
+        signal_processing.apply_butterworth_filter(data, fs, highpass_hz=150, lowpass_hz=100, hpf_enabled=True, lpf_enabled=True)
     
     # Check no filter applied
     no_filter_data = signal_processing.apply_butterworth_filter(data, fs)
     np.testing.assert_allclose(no_filter_data, data)
+
+def test_apply_butterworth_filter_bypass():
+    fs = 1000
+    t = np.linspace(0, 1, fs, endpoint=False)
+    data = np.sin(2 * np.pi * 50 * t) + np.sin(2 * np.pi * 200 * t)
+    
+    # HPF/LPF are False by default, so it should bypass even if frequencies are set
+    bypassed_data = signal_processing.apply_butterworth_filter(data, fs, highpass_hz=100.0, lowpass_hz=100.0)
+    np.testing.assert_allclose(bypassed_data, data)
+    
+    # Explicitly setting enabled to True should apply filter
+    filtered_data = signal_processing.apply_butterworth_filter(data, fs, highpass_hz=100.0, hpf_enabled=True)
+    assert np.std(filtered_data) < np.std(data)
+    
+    # Only HPF enabled
+    hpf_only_data = signal_processing.apply_butterworth_filter(data, fs, highpass_hz=100.0, lowpass_hz=100.0, hpf_enabled=True, lpf_enabled=False)
+    # This should be equivalent to HPF only
+    hpf_only_ref = signal_processing.apply_butterworth_filter(data, fs, highpass_hz=100.0, hpf_enabled=True)
+    np.testing.assert_allclose(hpf_only_data, hpf_only_ref)
 
 
 # --- Tests for Plugin-based Noise Reduction Filters ---

@@ -56,7 +56,9 @@ def apply_butterworth_filter(
     fs_hz: int,
     highpass_hz: Optional[float] = None,
     lowpass_hz: Optional[float] = None,
-    order: int = 4
+    order: int = 4,
+    hpf_enabled: bool = False,
+    lpf_enabled: bool = False
 ) -> np.ndarray:
     """
     Applies a Butterworth filter (high-pass, low-pass, or band-pass) to a signal.
@@ -64,18 +66,20 @@ def apply_butterworth_filter(
     Args:
         data: Input signal (NumPy array).
         fs_hz: Sampling frequency in Hz.
-        highpass_hz: Cutoff frequency for high-pass filter (Hz). If None, no HPF is applied.
-        lowpass_hz: Cutoff frequency for low-pass filter (Hz). If None, no LPF is applied.
+        highpass_hz: Cutoff frequency for high-pass filter (Hz).
+        lowpass_hz: Cutoff frequency for low-pass filter (Hz).
         order: Filter order.
+        hpf_enabled: Whether to apply the high-pass filter.
+        lpf_enabled: Whether to apply the low-pass filter.
 
     Returns:
         np.ndarray: Filtered signal.
     """
     nyquist = 0.5 * fs_hz
 
-    # Filter bypassing if None or 0
-    is_hpf = highpass_hz is not None and highpass_hz > 0
-    is_lpf = lowpass_hz is not None and lowpass_hz > 0
+    # Filter bypassing logic
+    is_hpf = hpf_enabled and highpass_hz is not None and highpass_hz > 0
+    is_lpf = lpf_enabled and lowpass_hz is not None and lowpass_hz > 0
 
     if not is_hpf and not is_lpf:
         return data

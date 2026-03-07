@@ -172,7 +172,15 @@ if page_selection == "通常解析":
             )
             
             processed_dc_removed = remove_dc_offset(data_raw)
-            processed = apply_butterworth_filter(processed_dc_removed, fs_hz, config.highpass_hz, config.lowpass_hz, config.filter_order)
+            processed = apply_butterworth_filter(
+                processed_dc_removed, 
+                fs_hz, 
+                config.highpass_hz, 
+                config.lowpass_hz, 
+                config.filter_order,
+                hpf_enabled=config.hpf_enabled,
+                lpf_enabled=config.lpf_enabled
+            )
             
             time_features = calculate_time_domain_features(processed)
             freqs, mags, freq_features = calculate_fft_features(processed, fs_hz, config.window)
@@ -231,16 +239,22 @@ elif page_selection == "ベンチマーク":
             # Assuming a fixed fs for benchmark, or derived from dataset
             # For simplicity, using dummy fs to prevent errors for nyquist calculation
             dummy_fs = 48000 
-            benchmark_hpf = st.number_input("HPF (Hz)", 0.0, float(dummy_fs/2), 10.0, key="benchmark_hpf")
-            benchmark_lpf = st.number_input("LPF (Hz)", 0.0, float(dummy_fs/2), float(dummy_fs/2), key="benchmark_lpf")
+            benchmark_hpf_enabled = st.checkbox("HPF有効", value=False, key="benchmark_hpf_enabled")
+            benchmark_hpf = st.number_input("HPF (Hz)", 0.0, float(dummy_fs/2), 10.0, key="benchmark_hpf", disabled=not benchmark_hpf_enabled)
+            
+            benchmark_lpf_enabled = st.checkbox("LPF有効", value=False, key="benchmark_lpf_enabled")
+            benchmark_lpf = st.number_input("LPF (Hz)", 0.0, float(dummy_fs/2), float(dummy_fs/2), key="benchmark_lpf", disabled=not benchmark_lpf_enabled)
+            
             benchmark_order = st.number_input("フィルタ次数", 1, 10, 4, key="benchmark_order")
         
         benchmark_analysis_config = AnalysisConfig(
             quantity=benchmark_quantity, 
             window=benchmark_window,
-            highpass_hz=float(benchmark_hpf), 
-            lowpass_hz=float(benchmark_lpf), 
-            filter_order=benchmark_order
+            highpass_hz=float(benchmark_hpf) if benchmark_hpf_enabled else None, 
+            lowpass_hz=float(benchmark_lpf) if benchmark_lpf_enabled else None, 
+            filter_order=benchmark_order,
+            hpf_enabled=benchmark_hpf_enabled,
+            lpf_enabled=benchmark_lpf_enabled
         )
 
     with st.expander("MT法設定 (ベンチマーク用)", expanded=True):

@@ -15,10 +15,10 @@ def dummy_benchmark_dataset(tmp_path):
     (dataset_root / "test" / "normal").mkdir(parents=True)
     (dataset_root / "test" / "anomaly").mkdir(parents=True)
     for i in range(5):
-        (dataset_root / "train" / "normal" / f"train_normal_{i}.wav").touch()
+        (dataset_root / "train" / "normal" / f"normal_train_{i}.wav").touch()
     for i in range(3):
-        (dataset_root / "test" / "normal" / f"test_normal_{i}.wav").touch()
-        (dataset_root / "test" / "anomaly" / f"test_anomaly_{i}.wav").touch()
+        (dataset_root / "test" / "normal" / f"normal_test_{i}.wav").touch()
+        (dataset_root / "test" / "anomaly" / f"anomaly_test_{i}.wav").touch()
     return dataset_root
 
 @pytest.fixture
@@ -29,18 +29,18 @@ def dcase_like_dataset(tmp_path):
     (id_00_dir / "test" / "normal").mkdir(parents=True)
     (id_00_dir / "test" / "anomaly").mkdir(parents=True)
     for i in range(2):
-        (id_00_dir / "train" / "normal" / f"train_normal_00_{i}.wav").touch()
-    (id_00_dir / "test" / "normal" / "test_normal_00_0.wav").touch()
-    (id_00_dir / "test" / "anomaly" / "test_anomaly_00_0.wav").touch()
+        (id_00_dir / "train" / "normal" / f"normal_train_00_{i}.wav").touch()
+    (id_00_dir / "test" / "normal" / "normal_test_00_0.wav").touch()
+    (id_00_dir / "test" / "anomaly" / "anomaly_test_00_0.wav").touch()
     id_02_dir = dataset_root / "id_02"
     (id_02_dir / "train" / "normal").mkdir(parents=True)
     (id_02_dir / "test" / "normal").mkdir(parents=True)
     (id_02_dir / "test" / "anomaly").mkdir(parents=True)
     for i in range(3):
-        (id_02_dir / "train" / "normal" / f"train_normal_02_{i}.wav").touch()
+        (id_02_dir / "train" / "normal" / f"normal_train_02_{i}.wav").touch()
     for i in range(2):
-        (id_02_dir / "test" / "normal" / f"test_normal_02_{i}.wav").touch()
-        (id_02_dir / "test" / "anomaly" / f"test_anomaly_02_{i}.wav").touch()
+        (id_02_dir / "test" / "normal" / f"normal_test_02_{i}.wav").touch()
+        (id_02_dir / "test" / "anomaly" / f"anomaly_test_02_{i}.wav").touch()
     return dataset_root
 
 @pytest.fixture

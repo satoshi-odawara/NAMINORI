@@ -106,7 +106,15 @@ def run_benchmark_test(benchmark_config: BenchmarkConfig, dataset_root_path: Pat
         for file_path in train_normal_files:
             fs_hz, data, _ = load_wav_file(str(file_path))
             processed = remove_dc_offset(data)
-            processed = apply_butterworth_filter(processed, fs_hz, benchmark_config.analysis_config.highpass_hz, benchmark_config.analysis_config.lowpass_hz, benchmark_config.analysis_config.filter_order)
+            processed = apply_butterworth_filter(
+                processed, 
+                fs_hz, 
+                benchmark_config.analysis_config.highpass_hz, 
+                benchmark_config.analysis_config.lowpass_hz, 
+                benchmark_config.analysis_config.filter_order,
+                hpf_enabled=benchmark_config.analysis_config.hpf_enabled,
+                lpf_enabled=benchmark_config.analysis_config.lpf_enabled
+            )
             time_features = calculate_time_domain_features(processed)
             _, _, freq_features = calculate_fft_features(processed, fs_hz, benchmark_config.analysis_config.window)
             features = VibrationFeatures(**asdict(time_features), **freq_features)
@@ -120,7 +128,15 @@ def run_benchmark_test(benchmark_config: BenchmarkConfig, dataset_root_path: Pat
             file_start_time = time.time()
             fs_hz, data, _ = load_wav_file(str(file_path))
             processed_dc_removed = remove_dc_offset(data)
-            signal_pre_nr = apply_butterworth_filter(processed_dc_removed, fs_hz, benchmark_config.analysis_config.highpass_hz, benchmark_config.analysis_config.lowpass_hz, benchmark_config.analysis_config.filter_order)
+            signal_pre_nr = apply_butterworth_filter(
+                processed_dc_removed, 
+                fs_hz, 
+                benchmark_config.analysis_config.highpass_hz, 
+                benchmark_config.analysis_config.lowpass_hz, 
+                benchmark_config.analysis_config.filter_order,
+                hpf_enabled=benchmark_config.analysis_config.hpf_enabled,
+                lpf_enabled=benchmark_config.analysis_config.lpf_enabled
+            )
             processed_final = signal_pre_nr
             nr_eval_results = None
             # ... (NR plugin logic is the same)
