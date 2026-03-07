@@ -21,6 +21,7 @@ from pathlib import Path
 import io
 from scipy.io.wavfile import write as write_wav
 from src.utils import synthetic_data_generator as sdg
+from src.utils import csv_parser
 
 st.set_page_config(layout="wide", page_title="振動解析Webアプリ")
 
@@ -63,7 +64,7 @@ if page_selection == "通常解析":
                 fs_hz, data_raw, file_hash = load_wav_file(tmp_file_path)
             elif file_extension == "csv":
                 st.sidebar.header("CSV解析設定")
-                csv_df_preview = pd.read_csv(tmp_file_path)
+                csv_df_preview = pd.read_csv(tmp_file_path, skipinitialspace=True)
                 
                 # Automatically detect potential data and timestamp columns
                 potential_numeric_cols = csv_df_preview.select_dtypes(include=np.number).columns.tolist()

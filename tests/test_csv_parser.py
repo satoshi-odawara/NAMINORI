@@ -128,3 +128,11 @@ def test_parse_csv_only_headers(create_dummy_csv):
     file_path = create_dummy_csv("headers.csv", content)
     with pytest.raises(ValueError, match="No acceleration data found in the specified column."):
         parse_csv_data(file_path, "accel_data", sampling_frequency_hz=100.0)
+
+def test_parse_csv_with_leading_spaces_in_header(create_dummy_csv):
+    content = "timestamp, accel_data, other_col\n2023-01-01 10:00:00, 1.0, A\n2023-01-01 10:00:01, 2.0, B"
+    file_path = create_dummy_csv("leading_spaces.csv", content)
+    # Should work even if we pass "accel_data" without space because of skipinitialspace=True
+    data, fs = parse_csv_data(file_path, "accel_data", sampling_frequency_hz=1.0)
+    np.testing.assert_array_almost_equal(data, np.array([1.0, 2.0]))
+    assert fs == 1.0

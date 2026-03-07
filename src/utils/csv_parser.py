@@ -23,7 +23,7 @@ def parse_csv_data(
             - acceleration_data: NumPy array of acceleration values.
             - actual_sampling_frequency_hz: Actual or inferred sampling frequency.
     """
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(file_path, skipinitialspace=True)
 
     if data_column not in df.columns:
         raise ValueError(f"Data column '{data_column}' not found in CSV file.")

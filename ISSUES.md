@@ -82,3 +82,4 @@
     *   **[Developer] Subtask 3: Integrate CSV Input into UI.** [DONE]
     *   **[QA/Expert] Subtask 4: Add Unit Tests for CSV Parsing.** [DONE]
     *   **[Documentation] Subtask 5: Update User Guide for CSV Input.** [DONE]
+- [x] ISSUE-058: [Developer] Fix CSV Parsing bugs (missing import and leading space handling) [CLOSED]
