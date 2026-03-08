@@ -23,6 +23,7 @@ from scipy.io.wavfile import write as write_wav
 from src.utils import synthetic_data_generator as sdg
 from src.utils import csv_parser
 from src.utils import preset_manager
+from src.utils import mt_manager
 from src.core.models import AnalysisPreset
 
 st.set_page_config(layout="wide", page_title="振動解析Webアプリ")
@@ -32,6 +33,27 @@ st.title("振動解析Webアプリケーション")
 # --- Initialize Presets and Session State ---
 if 'presets' not in st.session_state:
     st.session_state.presets = preset_manager.load_presets()
+
+# --- MT法 単位空間の初期化 ---
+if 'mt_space' not in st.session_state:
+    st.session_state.mt_space = MTSpace(min_samples=10, recommended_samples=30)
+
+def load_mt_space_into_session(space_name):
+    """単位空間をファイルから読み込み、セッション状態を更新する共通関数"""
+    if space_name == "未選択":
+        st.session_state.mt_space.mean_vector = None
+        st.session_state.mt_space.inverse_covariance_matrix = None
+        st.session_state.mt_space.is_provisional = True
+        return False
+    
+    space_data = mt_manager.load_unit_space(space_name)
+    if space_data:
+        st.session_state.mt_space.mean_vector = space_data["mean_vector"]
+        st.session_state.mt_space.inverse_covariance_matrix = space_data["inverse_covariance_matrix"]
+        st.session_state.mt_space.is_provisional = False
+        st.session_state.mt_space.normal_samples_vectors = [np.zeros(15)] * space_data["sample_count"]
+        return True
+    return False
 
 def apply_preset(preset_name):
     if preset_name in st.session_state.presets:
@@ -49,10 +71,14 @@ def apply_preset(preset_name):
         st.session_state.fft_log_x = p.fft_log_x
         st.session_state.show_raw_signal = p.show_raw_signal
         st.session_state.spec_nperseg = p.spec_nperseg
-
-# --- MT法 単位空間の初期化 ---
-if 'mt_space' not in st.session_state:
-    st.session_state.mt_space = MTSpace(min_samples=10, recommended_samples=30)
+        
+        # Automatically load associated unit space
+        if p.unit_space_name:
+            if load_mt_space_into_session(p.unit_space_name):
+                st.session_state.load_mt_space_name = p.unit_space_name
+        else:
+            st.session_state.load_mt_space_name = "未選択"
+            load_mt_space_into_session("未選択")
 
 # Page selection in sidebar
 page_selection = st.sidebar.radio(
@@ -75,35 +101,66 @@ if selected_preset != "新規作成":
 new_preset_name = st.sidebar.text_input("プリセット名", value="" if selected_preset == "新規作成" else selected_preset)
 if st.sidebar.button("現在の設定を保存"):
     if new_preset_name:
-        # Create config from current settings
-        # We need to handle the case where some session state keys might not be initialized yet
-        current_config = AnalysisConfig(
+        # Physical validity: Capture all current settings including UI state and plugin config
+        new_config = AnalysisConfig(
             quantity=st.session_state.get("eval_quantity", SignalQuantity.ACCEL),
             window=st.session_state.get("eval_window", WindowFunction.HANNING),
-            highpass_hz=st.session_state.get("eval_hpf"),
-            lowpass_hz=st.session_state.get("eval_lpf"),
+            highpass_hz=st.session_state.get("eval_hpf", 10.0),
+            lowpass_hz=st.session_state.get("eval_lpf", 20000.0),
             filter_order=st.session_state.get("eval_order", 4),
             hpf_enabled=st.session_state.get("eval_hpf_enabled", False),
-            lpf_enabled=st.session_state.get("eval_lpf_enabled", False)
+            lpf_enabled=st.session_state.get("eval_lpf_enabled", False),
+            noise_reduction_plugin_name=st.session_state.get("nr_plugin_selection") if st.session_state.get("nr_evaluation_enabled") else None,
+            noise_reduction_plugin_params=st.session_state.get("nr_plugin_params", {}) if st.session_state.get("nr_evaluation_enabled") else None
         )
         
+        # Unit space association
+        selected_space = st.session_state.get("load_mt_space_name")
+        unit_space_name = selected_space if selected_space != "未選択" else None
+
         new_preset = AnalysisPreset(
             name=new_preset_name,
-            config=current_config,
+            config=new_config,
             top_n_peaks=st.session_state.get("peak_count", 5),
-            min_peak_height_percent=st.session_state.get("peak_height", 10.0),
-            peak_distance_hz=st.session_state.get("peak_distance", 10.0),
+            min_peak_height_percent=float(st.session_state.get("peak_height", 10.0)),
+            peak_distance_hz=float(st.session_state.get("peak_distance", 10.0)),
             fft_log_x=st.session_state.get("fft_log_x", False),
             show_raw_signal=st.session_state.get("show_raw_signal", True),
-            spec_nperseg=st.session_state.get("spec_nperseg", 512)
+            spec_nperseg=st.session_state.get("spec_nperseg", 512),
+            unit_space_name=unit_space_name
         )
         
         st.session_state.presets[new_preset_name] = new_preset
         preset_manager.save_presets(st.session_state.presets)
         st.sidebar.success(f"プリセット '{new_preset_name}' を保存しました。")
-        # Removed st.rerun() to keep current analysis results visible
+        st.rerun()
     else:
-        st.sidebar.error("名前を入力してください。")
+        st.sidebar.error("プリセット名を入力してください。")
+
+# --- MT Method Management (Load only) moved here for visibility ---
+st.sidebar.markdown("---")
+with st.sidebar.expander("🛠️ MT法 (正常基準) 管理", expanded=True):
+    st.markdown("##### 保存済み単位空間の呼出")
+    saved_spaces = mt_manager.list_saved_unit_spaces()
+    
+    # Callback to handle automatic loading
+    def on_mt_space_selection_change():
+        selected = st.session_state.load_mt_space_name
+        if load_mt_space_into_session(selected):
+            # We can't use st.sidebar.success directly in callback easily without it disappearing, 
+            # but the UI will update naturally.
+            pass
+
+    selected_space_name = st.selectbox(
+        "単位空間を選択", 
+        options=["未選択"] + saved_spaces, 
+        key="load_mt_space_name",
+        on_change=on_mt_space_selection_change,
+        help="保存済みの基準値を読み込みます。選択すると即座に解析に反映されます。"
+    )
+    
+    if selected_space_name != "未選択":
+        st.sidebar.caption(f"✅ '{selected_space_name}' ロード済み")
 
 if page_selection == "通常解析":
     # --- Main Application ---
@@ -233,14 +290,22 @@ if page_selection == "通常解析":
             progress_bar.progress((i + 1) / len(uploaded_files))
         
         st.dataframe(pd.DataFrame(summary_results), width='stretch')
-        
         # --- Multi-file Unit Space Construction ---
-        st.markdown("##### 🛠️ MT法 単位空間の一括構築")
-        if st.button("📥 現在の全ファイルを正常データ（単位空間）として登録", help="現在アップロードされているすべてのファイルから特徴量を抽出し、MT法の基準となる『単位空間』を構築します。"):
+        st.markdown("##### 🛠️ MT法 単位空間の一括構築・保存")
+        col_c1, col_c2 = st.columns([2, 1])
+        with col_c1:
+            save_name_main = st.text_input("単位空間の保存名 (空欄なら保存せず構築のみ)", placeholder="例: ポンプA_20260308", key="main_unit_space_save_name")
+        with col_c2:
+            st.write("") # Spacer
+            build_btn = st.button("📥 単位空間を構築", use_container_width=True, help="現在の全ファイルから正常基準を構築します。名前を入力している場合は自動保存されます。")
+
+        if build_btn:
             norm_features_list = []
             construction_progress = st.progress(0)
-            
+
             for i, uploaded_file in enumerate(uploaded_files):
+                # ... (Features extraction logic)
+
                 file_extension = uploaded_file.name.split('.')[-1].lower()
                 with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_extension}") as tmp_file:
                     tmp_file.write(uploaded_file.getvalue())
@@ -281,7 +346,27 @@ if page_selection == "通常解析":
             
             if len(norm_features_list) >= 2: # MT法には最低2サンプル必要（実際は10以上推奨）
                 st.session_state.mt_space.build_unit_space(norm_features_list)
-                st.success(f"✅ {len(norm_features_list)} 個のファイルを用いて単位空間を構築しました。")
+                st.sidebar.success(f"✅ {len(norm_features_list)} 個のファイルを用いて単位空間を構築しました。")
+                
+                # Auto-save if name provided
+                if save_name_main:
+                    try:
+                        # Physical validity: Use session state to ensure variables are available regardless of execution order
+                        current_config = AnalysisConfig(
+                            quantity=st.session_state.get("eval_quantity", SignalQuantity.ACCEL),
+                            window=st.session_state.get("eval_window", WindowFunction.HANNING),
+                            highpass_hz=st.session_state.get("eval_hpf", 10.0),
+                            lowpass_hz=st.session_state.get("eval_lpf", 20000.0),
+                            filter_order=st.session_state.get("eval_order", 4),
+                            hpf_enabled=st.session_state.get("eval_hpf_enabled", False),
+                            lpf_enabled=st.session_state.get("eval_lpf_enabled", False)
+                        )
+                        mt_manager.save_unit_space(save_name_main, st.session_state.mt_space, current_config)
+                        st.session_state.load_mt_space_name = save_name_main # Set as currently selected
+                        st.sidebar.info(f"💾 単位空間 '{save_name_main}' をファイルに保存しました。")
+                    except Exception as e:
+                        st.sidebar.error(f"保存に失敗しました: {e}")
+                
                 st.rerun()
             else:
                 st.error("単位空間の構築には少なくとも2つ以上の有効なデータが必要です。")
@@ -411,20 +496,6 @@ if page_selection == "通常解析":
 
             st.write(f"ファイル名: {uploaded_file.name}, サンプリング周波数: {fs_hz} Hz, データ長: {len(data_raw) / fs_hz:.2f} 秒")
             
-            # --- Analysis Configuration (same as before) ---
-            st.sidebar.header("評価用データ解析設定")
-            quantity = st.sidebar.selectbox("物理量種別", list(SignalQuantity), format_func=lambda x: x.value, key="eval_quantity")
-            window = st.sidebar.selectbox("窓関数", list(WindowFunction), format_func=lambda x: x.value, key="eval_window")
-            
-            nyquist = fs_hz / 2
-            hpf_enabled = st.sidebar.checkbox("HPF有効", value=False, key="eval_hpf_enabled")
-            hpf = st.sidebar.number_input("HPF (Hz)", 0.0, nyquist, 10.0, key="eval_hpf", disabled=not hpf_enabled)
-            
-            lpf_enabled = st.sidebar.checkbox("LPF有効", value=False, key="eval_lpf_enabled")
-            lpf = st.sidebar.number_input("LPF (Hz)", 0.0, nyquist, nyquist, key="eval_lpf", disabled=not lpf_enabled)
-            
-            order = st.sidebar.number_input("フィルタ次数", 1, 10, 4, key="eval_order")
-            
             st.sidebar.header("FFTピーク設定")
             top_n_peaks = st.sidebar.slider("ピーク表示数", 1, 20, 5, key="peak_count")
             min_peak_height_percent = st.sidebar.slider("最小ピーク高さ（最大値に対する%）", 0, 100, 10, key="peak_height")
@@ -434,6 +505,15 @@ if page_selection == "通常解析":
             fft_log_x = st.sidebar.checkbox("FFT周波数軸を対数にする", value=False, key="fft_log_x")
             show_raw_signal = st.sidebar.checkbox("生信号(DC除去のみ)を表示する", value=True, key="show_raw_signal")
             spec_nperseg = st.sidebar.select_slider("スペクトログラム解像度 (Window Size)", options=[128, 256, 512, 1024, 2048], value=512, key="spec_nperseg")
+
+            # Physical validity: Retrieve config values from session state (updated by sidebar)
+            quantity = st.session_state.get("eval_quantity", SignalQuantity.ACCEL)
+            window = st.session_state.get("eval_window", WindowFunction.HANNING)
+            hpf_enabled = st.session_state.get("eval_hpf_enabled", False)
+            hpf = st.session_state.get("eval_hpf", 10.0)
+            lpf_enabled = st.session_state.get("eval_lpf_enabled", False)
+            lpf = st.session_state.get("eval_lpf", nyquist)
+            order = st.session_state.get("eval_order", 4)
 
             config = AnalysisConfig(
                 quantity=quantity, 
