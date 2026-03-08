@@ -53,23 +53,30 @@ def calculate_quality_metrics(
         data_length_s=data_length_s
     )
 
-def get_confidence_score(quality: QualityMetrics) -> float:
+def get_confidence_score(quality: QualityMetrics) -> Tuple[float, dict[str, float]]:
     """
-    Calculates the confidence score (0-100%) based on quality metrics.
+    Calculates the confidence score (0-100%) and its breakdown.
 
     Args:
         quality: QualityMetrics object.
 
     Returns:
-        float: Confidence score (0-100%).
+        Tuple[float, dict]: (Composite score, breakdown dictionary)
     """
     # クリッピングペナルティ
-    clip_score = max(0, 100 - quality.clipping_ratio * 10000)
+    # 以前は 1% で 0点 (10000倍) と厳しすぎたため、5% で 0点 (2000倍) に緩和
+    clip_score = max(0, 100 - quality.clipping_ratio * 2000)
     
     # S/N比スコア（20dB以上で満点）
-    snr_score = min(100, quality.snr_db * 5)
+    snr_score = min(100, max(0, quality.snr_db * 5))
     
     # データ長スコア（10秒以上で満点）
     length_score = min(100, quality.data_length_s * 10)
     
-    return np.mean([clip_score, snr_score, length_score])
+    breakdown = {
+        "飽和回避 (Clipping)": float(clip_score),
+        "ノイズ耐性 (SNR)": float(snr_score),
+        "データ量 (Length)": float(length_score)
+    }
+    
+    return float(np.mean([clip_score, snr_score, length_score])), breakdown

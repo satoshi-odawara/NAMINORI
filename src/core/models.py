@@ -81,6 +81,9 @@ class VibrationFeatures(TimeDomainFeatures):
     spectral_centroid: float
     spectral_spread: float
     spectral_entropy: float
+    overall_level: float # FFT Overall value (Total)
+    overall_low: float   # FFT Overall value (< 1000 Hz)
+    overall_high: float  # FFT Overall value (>= 1000 Hz)
 
     def to_vector(self) -> np.ndarray:
         """
@@ -90,7 +93,8 @@ class VibrationFeatures(TimeDomainFeatures):
             self.rms, self.peak, self.kurtosis, self.skewness,
             self.crest_factor, self.shape_factor,
             self.power_low, self.power_mid, self.power_high,
-            self.spectral_centroid, self.spectral_spread, self.spectral_entropy
+            self.spectral_centroid, self.spectral_spread, self.spectral_entropy,
+            self.overall_level, self.overall_low, self.overall_high
         ])
 
 @dataclass

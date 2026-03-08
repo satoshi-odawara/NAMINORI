@@ -130,10 +130,6 @@ if page_selection == "通常解析":
     if uploaded_files:
         summary_results = []
         
-        # We need a way to select which file to show details for
-        file_names = [f.name for f in uploaded_files]
-        selected_file_name = st.selectbox("詳細表示するファイルを選択", options=file_names)
-        
         # Process all files for the summary table
         st.subheader("📋 診断サマリー")
         progress_bar = st.progress(0)
@@ -152,9 +148,37 @@ if page_selection == "通常解析":
                 if file_extension == "wav":
                     fs_tmp, data_tmp, _ = load_wav_file(tmp_path)
                 else:
-                    # For CSV summary, we use first detected column and default settings
-                    # (In a real scenario, we might want to apply the current preset)
-                    data_tmp, fs_tmp, _ = csv_parser.parse_csv_data(Path(tmp_path), data_columns=[pd.read_csv(tmp_path).columns[0]], sampling_frequency_hz=1000.0)
+                    # Intelligent column and setting fallback for CSV summary
+                    df_tmp = pd.read_csv(tmp_path, nrows=5, skipinitialspace=True)
+                    # Physical validity: Strip columns for robust matching
+                    df_tmp.columns = [c.strip() for c in df_tmp.columns]
+                    # Use currently selected columns if they exist in this file, else infer
+                    selected_cols = st.session_state.get("csv_data_columns", [])
+                    active_cols = [c for c in selected_cols if c in df_tmp.columns]
+                    if not active_cols:
+                        active_cols = csv_parser.infer_vibration_columns(df_tmp.columns.tolist())
+                    if not active_cols:
+                        # Find first numeric column that isn't 'Time'
+                        potential = df_tmp.select_dtypes(include=np.number).columns.tolist()
+                        active_cols = [potential[0]] if potential else [df_tmp.columns[0]]
+                    
+                    # Use session settings for fs and synthesis
+                    s_fs = st.session_state.get("csv_sampling_frequency", 1000.0)
+                    s_ts = st.session_state.get("csv_timestamp_column") if st.session_state.get("csv_use_timestamp") else None
+                    s_syn = st.session_state.get("csv_synthesize", False)
+                    s_main_axis = st.session_state.get("csv_main_axis_selection")
+
+                    data_tmp, fs_tmp, col_map_tmp = csv_parser.parse_csv_data(
+                        Path(tmp_path), 
+                        data_columns=active_cols, 
+                        sampling_frequency_hz=s_fs,
+                        timestamp_column=s_ts if s_ts in df_tmp.columns else None,
+                        synthesize=s_syn if len(active_cols) > 1 else False
+                    )
+                    
+                    # Apply main axis selection if synthesis is OFF
+                    if not s_syn and s_main_axis and col_map_tmp and s_main_axis in col_map_tmp:
+                        data_tmp = col_map_tmp[s_main_axis]
                 
                 # Apply current filter settings
                 p_tmp = remove_dc_offset(data_tmp)
@@ -169,7 +193,7 @@ if page_selection == "通常解析":
                 f_hz, mags, f_feat = calculate_fft_features(p_tmp, fs_tmp, st.session_state.get("eval_window", WindowFunction.HANNING))
                 all_f = VibrationFeatures(**asdict(t_feat), **f_feat)
                 qual = calculate_quality_metrics(data_tmp, fs_tmp, t_feat.rms, mags)
-                conf = get_confidence_score(qual)
+                conf, _ = get_confidence_score(qual)
                 
                 md = None
                 if 'mt_space' in st.session_state and st.session_state.mt_space.mean_vector is not None:
@@ -177,14 +201,32 @@ if page_selection == "通常解析":
                 
                 summary_results.append({
                     "ファイル名": uploaded_file.name,
-                    "MD値 (異常度)": f"{md:.2f}" if md is not None else "-",
+                    "MD値": f"{md:.2f}" if md is not None else "-",
                     "判定": "🔴 異常" if md and md > 10 else "🟡 警告" if md and md > 3 else "🟢 正常" if md else "-",
                     "信頼度": f"{conf:.1f}%",
                     "RMS": f"{all_f.rms:.3f}",
-                    "クリッピング": f"{qual.clipping_ratio:.2%}"
+                    "Overall": f"{all_f.overall_level:.3f}",
+                    "OA(LF)": f"{all_f.overall_low:.3f}",
+                    "OA(HF)": f"{all_f.overall_high:.3f}",
+                    "Peak": f"{all_f.peak:.3f}",
+                    "尖度": f"{all_f.kurtosis:.2f}",
+                    "歪度": f"{all_f.skewness:.2f}",
+                    "CrestFactor": f"{all_f.crest_factor:.2f}",
+                    "ShapeFactor": f"{all_f.shape_factor:.2f}",
+                    "重心周波数": f"{all_f.spectral_centroid:.1f}",
+                    "周波数分散": f"{all_f.spectral_spread:.1f}",
+                    "スペクトルエントロピー": f"{all_f.spectral_entropy:.3f}",
+                    "S/N比(dB)": f"{qual.snr_db:.1f}",
+                    "クリッピング": f"{qual.clipping_ratio:.2%}",
+                    "データ長(s)": f"{qual.data_length_s:.1f}",
+                    "fs(Hz)": int(fs_tmp)
                 })
-            except:
-                summary_results.append({"ファイル名": uploaded_file.name, "判定": "ERROR"})
+            except Exception as e:
+                summary_results.append({
+                    "ファイル名": uploaded_file.name, 
+                    "判定": "🔴 ERROR",
+                    "備考": f"詳細エラー: {str(e)}"
+                })
             finally:
                 if os.path.exists(tmp_path): os.remove(tmp_path)
             
@@ -192,6 +234,10 @@ if page_selection == "通常解析":
         
         st.dataframe(pd.DataFrame(summary_results), width='stretch')
         st.markdown("---")
+
+        # We need a way to select which file to show details for
+        file_names = [f.name for f in uploaded_files]
+        selected_file_name = st.selectbox("詳細表示するファイルを選択", options=file_names)
 
         # Now show the details for the single selected file
         target_file = next(f for f in uploaded_files if f.name == selected_file_name)
@@ -360,7 +406,7 @@ if page_selection == "通常解析":
             time_features = calculate_time_domain_features(processed)
             freqs, mags, freq_features = calculate_fft_features(processed, fs_hz, config.window)
             quality = calculate_quality_metrics(data_raw, fs_hz, time_features.rms, mags)
-            confidence = get_confidence_score(quality)
+            confidence, conf_breakdown = get_confidence_score(quality)
             unit = config.quantity.unit_str
 
             all_features = VibrationFeatures(**asdict(time_features), **freq_features)
@@ -373,6 +419,12 @@ if page_selection == "通常解析":
                 st.metric("尖度 (Kurtosis)", f"{all_features.kurtosis:.3f}", help="波形の鋭さ。軸受の傷などによる衝撃波が発生すると値が大きくなります。正常値は約3.0です。")
 
                 st.subheader("周波数領域 特徴量")
+                st.metric(f"Overall (Total) ({unit})", f"{all_features.overall_level:.3f}", help="全周波数帯域の振動エネルギーを統合した実効値。理論上、時間領域のRMSと一致します。")
+                col_oa1, col_ana_oa2 = st.columns(2)
+                with col_oa1:
+                    st.metric(f"Overall (LF) ({unit})", f"{all_features.overall_low:.3f}", help="1,000Hz未満の振動成分のみを統合した実効値。アンバランスやガタの影響を捉えます。")
+                with col_ana_oa2:
+                    st.metric(f"Overall (HF) ({unit})", f"{all_features.overall_high:.3f}", help="1,000Hz以上の振動成分のみを統合した実効値。軸受損傷や摩擦の影響を捉えます。")
                 st.metric("Spectral Centroid (Hz)", f"{all_features.spectral_centroid:.2f}", help="スペクトルの「重心」。振動の主成分がどの周波数帯にあるかを示します。")
                 st.metric("Spectral Spread (Hz)", f"{all_features.spectral_spread:.2f}", help="スペクトルの「広がり」。振動が特定の周波数に集中しているか、広帯域に分散しているかを示します。")
                 st.metric("Spectral Entropy", f"{all_features.spectral_entropy:.3f}", help="スペクトルの「複雑さ（乱雑さ）」。不規則なノイズが多いほど値が大きくなります。")
@@ -385,12 +437,16 @@ if page_selection == "通常解析":
                 st.markdown(f'#### 診断信頼度: <span style="color:{color};" title="データ品質（クリッピング、S/N比、データ長）に基づいた、この解析結果の確からしさを示します。">{confidence:.1f}%</span>', unsafe_allow_html=True)
                 
                 with st.expander("🤔 診断信頼度とは？"):
-                    st.write("""
-                    この数値は、以下の3つの観点から「今回の解析結果をどの程度信じてよいか」を判定しています。
+                    st.write("解析結果の妥当性を以下の3指標（各100点満点）で評価しています：")
+                    for label, score in conf_breakdown.items():
+                        st.write(f"{label}: {score:.1f}")
+                        st.progress(score / 100.0)
                     
-                    1. **波形の欠落（クリッピング）**: 振動が大きすぎてセンサの限界を超えていないか。
-                    2. **ノイズの影響（S/N比）**: 周囲の雑音に埋もれず、対象の振動をクリアに捉えられているか。
-                    3. **録音時間（データ長）**: 物理現象を正しく捉えるのに十分な長さ（10秒以上推奨）があるか。
+                    st.markdown("---")
+                    st.write("""
+                    1. **飽和回避 (Clipping)**: 振動が大きすぎてセンサの限界を超えていないか。
+                    2. **ノイズ耐性 (SNR)**: 周囲の雑音に埋もれず、対象の振動をクリアに捉えられているか。
+                    3. **データ量 (Length)**: 物理現象を正しく捉えるのに十分な長さ（10秒以上推奨）があるか。
                     
                     **【解釈の目安】**
                     - **80%以上**: 信頼できる結果です。

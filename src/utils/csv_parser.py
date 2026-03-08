@@ -50,13 +50,18 @@ def parse_csv_data(
             - column_data_map: Dictionary mapping column names to their original arrays (if multiple columns).
     """
     df = pd.read_csv(file_path, skipinitialspace=True)
+    # Physical validity: Ensure column names are stripped of whitespace for robust matching
+    df.columns = [c.strip() for c in df.columns]
 
     if isinstance(data_columns, str):
         data_columns = [data_columns]
+    
+    # Strip requested column names as well
+    data_columns = [c.strip() for c in data_columns]
 
     for col in data_columns:
         if col not in df.columns:
-            raise ValueError(f"Data column '{col}' not found in CSV file.")
+            raise ValueError(f"Data column '{col}' not found in CSV file. Available: {list(df.columns)}")
 
     if timestamp_column:
         if timestamp_column not in df.columns:
@@ -66,24 +71,32 @@ def parse_csv_data(
         if pd.api.types.is_numeric_dtype(df[timestamp_column]):
             timestamps = pd.to_datetime(df[timestamp_column], unit='s', errors='coerce')
         else:
-            timestamps = pd.to_datetime(df[timestamp_column], errors='coerce')
+            # Use 'mixed' format for flexibility with various time strings
+            timestamps = pd.to_datetime(df[timestamp_column], errors='coerce', format='mixed')
 
         if timestamps.isnull().any():
             raise ValueError("Could not parse all timestamps. Check format or missing values.")
         
         time_diffs = (timestamps - timestamps.iloc[0]).dt.total_seconds()
+        total_duration = time_diffs.iloc[-1]
         
-        # Infer sampling frequency from time differences
+        # Infer sampling frequency
         if len(time_diffs) > 1:
-            mean_interval = np.mean(np.diff(time_diffs))
-            if mean_interval > 0:
-                inferred_fs = 1.0 / mean_interval
-                # Check for significant variations in sampling frequency
-                if np.std(np.diff(time_diffs)) / mean_interval > 0.05: # More than 5% variation
+            if total_duration > 0:
+                # Use total duration and number of samples for more robustness
+                # especially when timestamps have low precision (e.g. only 1 sec)
+                inferred_fs = (len(df) - 1) / total_duration
+                
+                # Check consistency
+                intervals = np.diff(time_diffs)
+                if np.any(intervals == 0):
+                    print("Note: Low-precision timestamps detected. Using total duration for FS inference.")
+                elif np.std(intervals) / np.mean(intervals) > 0.05:
                     print("Warning: Inconsistent sampling intervals detected. Using average frequency.")
+                
                 actual_sampling_frequency_hz = inferred_fs
             else:
-                raise ValueError("Timestamps are not increasing, cannot infer sampling frequency.")
+                raise ValueError("Total duration is zero. Cannot infer sampling frequency from timestamps.")
         else:
             raise ValueError("Not enough timestamps to infer sampling frequency.")
 

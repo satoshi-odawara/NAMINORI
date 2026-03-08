@@ -149,10 +149,36 @@ def calculate_fft_features(
         'power_high': power_high
     }
     
-    # Calculate spectral shape features
+    # Calculate spectral centroid, spread, and entropy
     spectral_shape_features = calculate_spectral_features(freq_hz, magnitude)
+
+    # Calculate FFT Overall Level (Energy-based)
+    # Use Parseval's theorem with window energy correction to match time-domain RMS
+    mag_sq = np.abs(fft_result)**2
     
+    # Scale factors for single-sided FFT power
+    # mag_sq[0] (DC) and mag_sq[-1] (Nyquist, if N is even) are not doubled
+    power_factors = np.full_like(mag_sq, 2.0)
+    power_factors[0] = 1.0
+    if len(data) % 2 == 0:
+        power_factors[-1] = 1.0
+    
+    scaled_power = mag_sq * power_factors
+    normalization = len(data) * np.sum(window**2)
+    
+    # Total Overall
+    overall_level = np.sqrt(np.sum(scaled_power) / normalization)
+    
+    # Band-specific Overall
+    overall_low = np.sqrt(np.sum(scaled_power[freq_hz < 1000]) / normalization)
+    overall_high = np.sqrt(np.sum(scaled_power[freq_hz >= 1000]) / normalization)
+    
+    spectral_shape_features["overall_level"] = overall_level
+    spectral_shape_features["overall_low"] = overall_low
+    spectral_shape_features["overall_high"] = overall_high
+
     # Combine all frequency-domain features
     all_features = {**power_bands, **spectral_shape_features}
 
     return freq_hz, magnitude, all_features
+
