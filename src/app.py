@@ -164,6 +164,86 @@ with st.sidebar.expander("🛠️ MT法 (正常基準) 管理", expanded=True):
         st.sidebar.caption(f"✅ '{selected_space_name}' ロード済み")
 
 if page_selection == "通常解析":
+    # --- Sidebar Analysis Settings (Physicality & Traceability) ---
+    st.sidebar.header("🔬 解析設定")
+    
+    with st.sidebar.expander("基本設定", expanded=True):
+        st.session_state.eval_quantity = st.selectbox(
+            "物理量種別", 
+            list(SignalQuantity), 
+            format_func=lambda x: x.value,
+            key="eval_quantity_selector", # Use different key to avoid direct state sync issues if needed
+            index=list(SignalQuantity).index(st.session_state.get("eval_quantity", SignalQuantity.ACCEL))
+        )
+        # Sync back to canonical state
+        st.session_state.eval_quantity = st.session_state.eval_quantity_selector
+
+        st.session_state.eval_window = st.selectbox(
+            "窓関数", 
+            list(WindowFunction), 
+            format_func=lambda x: x.value,
+            key="eval_window_selector",
+            index=list(WindowFunction).index(st.session_state.get("eval_window", WindowFunction.HANNING))
+        )
+        st.session_state.eval_window = st.session_state.eval_window_selector
+
+    with st.sidebar.expander("フィルタ設定 (DC除去は自動適用)", expanded=True):
+        st.session_state.eval_hpf_enabled = st.checkbox("HPF (高域通過) 有効", value=st.session_state.get("eval_hpf_enabled", False))
+        st.session_state.eval_hpf = st.number_input(
+            "HPF カットオフ (Hz)", 
+            min_value=0.1, max_value=20000.0, 
+            value=st.session_state.get("eval_hpf", 10.0),
+            disabled=not st.session_state.eval_hpf_enabled
+        )
+        
+        st.session_state.eval_lpf_enabled = st.checkbox("LPF (低域通過) 有効", value=st.session_state.get("eval_lpf_enabled", False))
+        st.session_state.eval_lpf = st.number_input(
+            "LPF カットオフ (Hz)", 
+            min_value=1.0, max_value=100000.0, 
+            value=st.session_state.get("eval_lpf", 20000.0),
+            disabled=not st.session_state.eval_lpf_enabled
+        )
+        
+        st.session_state.eval_order = st.slider("フィルタ次数", 1, 10, st.session_state.get("eval_order", 4))
+
+    # --- Noise Reduction (Plugin System) ---
+    with st.sidebar.expander("🧹 ノイズ除去 (評価用)", expanded=False):
+        st.session_state.nr_evaluation_enabled = st.checkbox("ノイズ除去評価を有効化", value=st.session_state.get("nr_evaluation_enabled", False))
+        
+        if st.session_state.nr_evaluation_enabled:
+            available_plugins = plugin_manager.list_plugins()
+            plugin_names = [p.get_display_name() for p in available_plugins]
+            
+            selected_plugin_name = st.selectbox(
+                "アルゴリズム選択", 
+                options=plugin_names,
+                index=0 if not st.session_state.get("nr_plugin_selection") else plugin_names.index(st.session_state.nr_plugin_selection) if st.session_state.nr_plugin_selection in plugin_names else 0
+            )
+            st.session_state.nr_plugin_selection = selected_plugin_name
+            
+            selected_plugin = next(p for p in available_plugins if p.get_display_name() == selected_plugin_name)
+            
+            # Dynamic Parameter UI from Plugin
+            plugin_params = {}
+            for param in selected_plugin.get_parameters():
+                if param.param_type == "number_input":
+                    plugin_params[param.name] = st.number_input(
+                        label=param.label,
+                        min_value=param.min_value,
+                        max_value=param.max_value,
+                        value=param.default if param.name not in st.session_state.get("nr_plugin_params", {}) else st.session_state.nr_plugin_params[param.name],
+                        help=param.help_text
+                    )
+                elif param.param_type == "slider":
+                    plugin_params[param.name] = st.slider(
+                        label=param.label,
+                        min_value=param.min_value,
+                        max_value=param.max_value,
+                        value=param.default if param.name not in st.session_state.get("nr_plugin_params", {}) else st.session_state.nr_plugin_params[param.name],
+                        help=param.help_text
+                    )
+            st.session_state.nr_plugin_params = plugin_params
+
     # --- Main Application ---
     # Initialize uploader key if not present
     if 'uploader_key' not in st.session_state:
