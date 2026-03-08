@@ -18,6 +18,8 @@ Open the provided local URL (e.g., `http://localhost:8501`) in your web browser.
 
 The application supports vibration data from both WAV files (LPCM 16/24/32bit) and CSV files. **Multiple files can be uploaded simultaneously for batch analysis.**
 
+*   **Clear All Files:** Click the "🗑️ 全ファイルをクリア" (Clear All Files) button to remove all uploaded files from the list and reset the analysis results.
+
 ### For WAV Files:
 *   The application will display the file name, sampling frequency (Fs), and duration of the loaded data.
 *   An audio player will also appear, allowing you to listen to the uploaded file.

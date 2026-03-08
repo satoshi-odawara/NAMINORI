@@ -107,8 +107,25 @@ if st.sidebar.button("現在の設定を保存"):
 
 if page_selection == "通常解析":
     # --- Main Application ---
-    # Enhanced file uploader for multiple files
-    uploaded_files = st.file_uploader("評価用WAVまたはCSVファイルをアップロード (複数可)", type=["wav", "csv"], accept_multiple_files=True, key="evaluation_uploader")
+    # Initialize uploader key if not present
+    if 'uploader_key' not in st.session_state:
+        st.session_state.uploader_key = 0
+
+    col_up1, col_up2 = st.columns([4, 1])
+    with col_up1:
+        # Enhanced file uploader for multiple files with dynamic key for resetting
+        uploaded_files = st.file_uploader(
+            "評価用WAVまたはCSVファイルをアップロード (複数可)", 
+            type=["wav", "csv"], 
+            accept_multiple_files=True, 
+            key=f"evaluation_uploader_{st.session_state.uploader_key}"
+        )
+    with col_up2:
+        st.write("") # Spacer
+        st.write("") # Spacer
+        if st.button("🗑️ 全ファイルをクリア", help="アップロードされたすべてのファイルをリストから削除します。"):
+            st.session_state.uploader_key += 1
+            st.rerun()
 
     if uploaded_files:
         summary_results = []
@@ -173,7 +190,7 @@ if page_selection == "通常解析":
             
             progress_bar.progress((i + 1) / len(uploaded_files))
         
-        st.dataframe(pd.DataFrame(summary_results), use_container_width=True)
+        st.dataframe(pd.DataFrame(summary_results), width='stretch')
         st.markdown("---")
 
         # Now show the details for the single selected file
@@ -182,6 +199,11 @@ if page_selection == "通常解析":
         
         # --- (Existing detail logic starts here) ---
         file_extension = uploaded_file.name.split('.')[-1].lower()
+        data_raw = None
+        fs_hz = None
+        file_hash = None
+        tmp_file_path = None
+        column_data_map = None # Initialize to None to prevent undefined error in detail view
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_extension}") as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
@@ -423,7 +445,7 @@ if page_selection == "通常解析":
                         margin=dict(l=20, r=20, t=20, b=20),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
-                    st.plotly_chart(fig_time, use_container_width=True)
+                    st.plotly_chart(fig_time, width='stretch')
 
                 with tab2:
                     st.subheader("FFT スペクトル")
@@ -482,7 +504,7 @@ if page_selection == "通常解析":
                         margin=dict(l=20, r=20, t=20, b=20),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
-                    st.plotly_chart(fig_fft, use_container_width=True)
+                    st.plotly_chart(fig_fft, width='stretch')
 
                 with tab3:
                     st.subheader("スペクトログラム (解析対象信号)")
@@ -509,7 +531,7 @@ if page_selection == "通常解析":
                         height=500,
                         margin=dict(l=20, r=20, t=40, b=20)
                     )
-                    st.plotly_chart(fig_spec, use_container_width=True)
+                    st.plotly_chart(fig_spec, width='stretch')
 
                     # Add component spectrograms if available
                     if column_data_map:
@@ -533,7 +555,7 @@ if page_selection == "通常解析":
                                 height=400,
                                 margin=dict(l=20, r=20, t=40, b=20)
                             )
-                            st.plotly_chart(fig_c, use_container_width=True)
+                            st.plotly_chart(fig_c, width='stretch')
 
         except Exception as e:
             st.error(f"解析エラー: {e}")
@@ -691,7 +713,7 @@ elif page_selection == "ベンチマーク":
                             showarrow=False,
                             font=dict(color="black")
                         )
-                st.plotly_chart(cm_fig, use_container_width=True)
+                st.plotly_chart(cm_fig, width='stretch')
 
             # ROC Curve
             if benchmark_result.roc_curve and benchmark_result.roc_auc is not None:
@@ -700,7 +722,7 @@ elif page_selection == "ベンチマーク":
                 roc_fig.add_trace(go.Scatter(x=benchmark_result.roc_curve['fpr'], y=benchmark_result.roc_curve['tpr'], mode='lines', name=f'ROC (AUC = {benchmark_result.roc_auc:.2f})'))
                 roc_fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode='lines', name='Random Classifier', line=dict(dash='dash')))
                 roc_fig.update_layout(xaxis_title="偽陽性率 (FPR)", yaxis_title="真陽性率 (TPR)", height=400, margin=dict(l=20,r=20,t=40,b=20))
-                st.plotly_chart(roc_fig, use_container_width=True)
+                st.plotly_chart(roc_fig, width='stretch')
 
             # Mahalanobis Distance Scatter Plot
             if benchmark_result.file_results:
@@ -740,7 +762,7 @@ elif page_selection == "ベンチマーク":
                     height=400, margin=dict(l=20,r=20,t=40,b=20),
                     showlegend=True
                 )
-                st.plotly_chart(md_fig, use_container_width=True)
+                st.plotly_chart(md_fig, width='stretch')
 
 
             st.markdown("---")

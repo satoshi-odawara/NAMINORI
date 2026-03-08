@@ -106,3 +106,6 @@
 - [x] ISSUE-067: [Developer] 解析プリセットの永続化ロジックとStreamlit UIの実装 [CLOSED]
 - [x] ISSUE-068: [Developer] 複数ファイル一括アップロードと診断サマリー一覧表示の実装 [CLOSED]
 - [x] ISSUE-069: [QA/Expert] プリセット適用時のUI状態整合性と大量ファイル処理の安定性検証 [CLOSED]
+- [x] ISSUE-070: [Developer] Streamlit API 互換性対応 (`use_container_width` の廃止対応) [CLOSED]
+- [x] ISSUE-071: [Developer] WAVファイル解析時の `column_data_map` 未定義エラーの修正 [CLOSED]
+- [ ] ISSUE-072: [Developer] アップロード済みファイルの一括削除（クリア）機能の実装 [OPEN]
