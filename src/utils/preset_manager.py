@@ -37,9 +37,11 @@ def load_presets() -> Dict[str, AnalysisPreset]:
                 peak_distance_hz=p.get("peak_distance_hz", 10.0),
                 fft_log_x=p.get("fft_log_x", False),
                 show_raw_signal=p.get("show_raw_signal", True),
-                spec_nperseg=p.get("spec_nperseg", 512)
+                spec_nperseg=p.get("spec_nperseg", 512),
+                unit_space_name=p.get("unit_space_name")
             )
         return presets
+
     except Exception as e:
         print(f"Error loading presets: {e}")
         return {}
@@ -67,7 +69,8 @@ def save_presets(presets: Dict[str, AnalysisPreset]):
             "peak_distance_hz": p.peak_distance_hz,
             "fft_log_x": p.fft_log_x,
             "show_raw_signal": p.show_raw_signal,
-            "spec_nperseg": p.spec_nperseg
+            "spec_nperseg": p.spec_nperseg,
+            "unit_space_name": p.unit_space_name
         }
     
     with open(PRESET_FILE, "w", encoding="utf-8") as f:
