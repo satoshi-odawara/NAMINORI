@@ -168,28 +168,36 @@ if page_selection == "通常解析":
     st.sidebar.header("🔬 解析設定")
     
     with st.sidebar.expander("基本設定", expanded=True):
-        # Physical validity: Ensure session values are Enum types even if loaded as strings
+        # Physical validity: Ensure session values are Enum types and find their index robustly
         q_val = st.session_state.get("eval_quantity", SignalQuantity.ACCEL)
-        if isinstance(q_val, str): q_val = SignalQuantity(q_val)
+        # Use a list of values to find the index, which is robust against object identity mismatches
+        q_options = list(SignalQuantity)
+        q_values = [m.value for m in q_options]
+        # Get the value to search for (handle both Enum objects and strings)
+        target_q_val = q_val.value if hasattr(q_val, 'value') else q_val
+        q_index = q_values.index(target_q_val) if target_q_val in q_values else 0
         
         st.session_state.eval_quantity = st.selectbox(
             "物理量種別", 
-            list(SignalQuantity), 
+            q_options, 
             format_func=lambda x: x.value,
             key="eval_quantity_selector",
-            index=list(SignalQuantity).index(q_val)
+            index=q_index
         )
         st.session_state.eval_quantity = st.session_state.eval_quantity_selector
 
         w_val = st.session_state.get("eval_window", WindowFunction.HANNING)
-        if isinstance(w_val, str): w_val = WindowFunction(w_val)
+        w_options = list(WindowFunction)
+        w_values = [m.value for m in w_options]
+        target_w_val = w_val.value if hasattr(w_val, 'value') else w_val
+        w_index = w_values.index(target_w_val) if target_w_val in w_values else 0
 
         st.session_state.eval_window = st.selectbox(
             "窓関数", 
-            list(WindowFunction), 
+            w_options, 
             format_func=lambda x: x.value,
             key="eval_window_selector",
-            index=list(WindowFunction).index(w_val)
+            index=w_index
         )
         st.session_state.eval_window = st.session_state.eval_window_selector
 
