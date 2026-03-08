@@ -101,7 +101,7 @@ if st.sidebar.button("現在の設定を保存"):
         st.session_state.presets[new_preset_name] = new_preset
         preset_manager.save_presets(st.session_state.presets)
         st.sidebar.success(f"プリセット '{new_preset_name}' を保存しました。")
-        st.rerun()
+        # Removed st.rerun() to keep current analysis results visible
     else:
         st.sidebar.error("名前を入力してください。")
 
