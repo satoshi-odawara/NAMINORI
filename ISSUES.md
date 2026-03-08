@@ -110,7 +110,7 @@
 - [x] ISSUE-071: [Developer] WAVファイル解析時の `column_data_map` 未定義エラーの修正 [CLOSED]
 - [x] ISSUE-072: [Developer] アップロード済みファイルの一括削除（クリア）機能の実装 [CLOSED]
 - [x] ISSUE-073: [Developer] 診断サマリー一覧への表示項目（Peak, 尖度, fs, 解析条件等）の追加 [CLOSED]
-- [ ] ISSUE-074: [Developer] アップロード済みファイルからの一括単位空間構築機能の実装 [OPEN]
+- [x] ISSUE-074: [Developer] アップロード済みファイルからの一括単位空間構築機能の実装 (パワー平均の導入とバグ修正を完了) [CLOSED]
 - [ ] ISSUE-075: [Developer] 特徴量別の寄与度（SN比/利得）可視化グラフの追加 [OPEN]
 - [x] ISSUE-076: [Developer] 単位空間（正常基準）の保存・呼出機能の実装と永続化（UI統合と自動ロードを実装） [CLOSED]
 - [ ] ISSUE-077: [QA/Expert] 単位空間と解析プリセットの不整合チェック機能の検証 [OPEN]

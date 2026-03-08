@@ -8,7 +8,7 @@ from typing import List, Optional
 class MTSpace:
     """
     Manages the Mahalanobis-Taguchi (MT) unit space for anomaly detection
-    and learns an averaged noise power spectrum from normal data for noise reduction.
+    and learns an averaged magnitude spectrum from normal data for visualization.
     """
     def __init__(self, min_samples: int = 10, recommended_samples: int = 30):
         self.normal_samples_vectors: List[np.ndarray] = []
@@ -18,91 +18,66 @@ class MTSpace:
         self.recommended_samples = recommended_samples
         self.is_provisional = True
         
-        # For noise profile learning
-        self.individual_normal_power_spectra: List[np.ndarray] = []
-        self.noise_power_spectrum_avg: Optional[np.ndarray] = None
+        # For noise profile learning (averaged magnitude spectrum)
+        self.normal_magnitude_spectra: List[np.ndarray] = []
+        self.average_magnitude_spectrum: Optional[np.ndarray] = None
 
-    def add_normal_sample(self, features: VibrationFeatures, processed_signal: np.ndarray, fs_hz: int, analysis_config: AnalysisConfig):
+    def add_normal_sample(self, features: VibrationFeatures, magnitude_spectrum: np.ndarray):
         """
-        Adds a new normal sample (VibrationFeatures) to the unit space and
-        contributes to learning the averaged noise power spectrum.
-        Automatically updates the unit space if enough samples are available.
+        Adds a new normal sample (VibrationFeatures and its magnitude spectrum).
         """
         self.normal_samples_vectors.append(features.to_vector())
-        
-        # Calculate power spectrum for noise profile learning
-        _, _, power_bands = calculate_fft_features(processed_signal, fs_hz, analysis_config.window)
-        # We need the full power spectrum, not just bands. Recalculate or modify calculate_fft_features
-        # For simplicity here, we'll re-do FFT to get full spectrum
-        N = len(processed_signal)
-        
-        selected_window = analysis_config.window.value # Use dynamically selected window
-        if selected_window == "hanning":
-            win = np.hanning(N)
-        elif selected_window == "flattop":
-            win = signal.windows.flattop(N)
-        else:
-            win = np.ones(N) # Rectangular window if none specified (or for custom)
-
-        data_windowed = processed_signal * win
-        fft_result = fft(data_windowed)
-        
-        # Power spectrum (magnitude squared)
-        power_spectrum = np.abs(fft_result)**2
-        self.individual_normal_power_spectra.append(power_spectrum)
-
+        self.normal_magnitude_spectra.append(magnitude_spectrum)
         self._update_unit_space()
 
-    def build_unit_space(self, features_list: List[VibrationFeatures]):
+    def build_unit_space(self, features_list: List[VibrationFeatures], magnitude_spectra: List[np.ndarray]):
         """
-        Builds the unit space from a list of VibrationFeatures.
-        This resets any previously added samples and builds a new unit space.
+        Builds the unit space from a list of features and their corresponding spectra.
         """
         self.normal_samples_vectors = [f.to_vector() for f in features_list]
+        self.normal_magnitude_spectra = magnitude_spectra
         self._update_unit_space()
 
     def _update_unit_space(self):
         """
-        Updates the mean vector, inverse covariance matrix, and averaged noise power spectrum
-        if enough normal samples are available.
+        Updates the mean vector, inverse covariance matrix, and average magnitude spectrum.
         """
         if len(self.normal_samples_vectors) == 0:
             self.mean_vector = None
             self.inverse_covariance_matrix = None
             self.is_provisional = True
-            self.noise_power_spectrum_avg = None
+            self.average_magnitude_spectrum = None
             return
 
         feature_vectors = np.array(self.normal_samples_vectors)
-        num_features = feature_vectors.shape[1] # Number of features in VibrationFeatures
+        num_features = feature_vectors.shape[1]
 
-        if len(self.normal_samples_vectors) <= num_features: # Need more samples than features for a non-singular cov matrix
-            print(f"Warning: Insufficient normal samples ({len(self.normal_samples_vectors)}) for stable covariance matrix estimation (need >{num_features} samples). Consider increasing 'min_samples'.")
-            self.mean_vector = None
+        # Calculate mean vector and average magnitude spectrum (always possible if len > 0)
+        self.mean_vector = np.mean(feature_vectors, axis=0)
+        
+        if self.normal_magnitude_spectra:
+            lengths = [len(s) for s in self.normal_magnitude_spectra]
+            if len(set(lengths)) == 1:
+                spectra_array = np.array(self.normal_magnitude_spectra)
+                self.average_magnitude_spectrum = np.sqrt(np.mean(spectra_array**2, axis=0))
+            else:
+                self.average_magnitude_spectrum = self.normal_magnitude_spectra[-1]
+
+        # Guard for inverse covariance matrix (requires more samples than features)
+        if len(self.normal_samples_vectors) <= num_features:
             self.inverse_covariance_matrix = None
             self.is_provisional = True
-            self.noise_power_spectrum_avg = None
             return
 
-        # Calculate mean vector
-        self.mean_vector = np.mean(feature_vectors, axis=0)
-
-        # Calculate covariance matrix
         covariance_matrix = np.cov(feature_vectors, rowvar=False)
 
         try:
             self.inverse_covariance_matrix = np.linalg.inv(covariance_matrix)
         except np.linalg.LinAlgError:
-            print("Warning: Covariance matrix is singular. Applying regularization.")
             regularization_term = np.identity(covariance_matrix.shape[0]) * 1e-9
             self.inverse_covariance_matrix = np.linalg.inv(covariance_matrix + regularization_term)
 
         self.is_provisional = len(self.normal_samples_vectors) < self.recommended_samples
-        
-        # Calculate averaged noise power spectrum
-        if self.individual_normal_power_spectra:
-            self.noise_power_spectrum_avg = np.mean(self.individual_normal_power_spectra, axis=0)
-            self.individual_normal_power_spectra.clear() # Clear to save memory
 
     def calculate_md(self, features: VibrationFeatures) -> float:
         """

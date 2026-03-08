@@ -51,6 +51,7 @@ class AnalysisPreset:
     fft_log_x: bool = False
     show_raw_signal: bool = True
     spec_nperseg: int = 512
+    unit_space_name: Optional[str] = None # Associated unit space
 
 @dataclass
 class QualityMetrics:
@@ -84,6 +85,16 @@ class VibrationFeatures(TimeDomainFeatures):
     overall_level: float # FFT Overall value (Total)
     overall_low: float   # FFT Overall value (< 1000 Hz)
     overall_high: float  # FFT Overall value (>= 1000 Hz)
+
+    @staticmethod
+    def get_feature_names() -> List[str]:
+        """Returns the list of feature names in the same order as to_vector()."""
+        return [
+            "RMS", "Peak", "Kurtosis", "Skewness", "CrestFactor", "ShapeFactor",
+            "PowerLow", "PowerMid", "PowerHigh",
+            "SpectralCentroid", "SpectralSpread", "SpectralEntropy",
+            "OverallTotal", "OverallLow", "OverallHigh"
+        ]
 
     def to_vector(self) -> np.ndarray:
         """

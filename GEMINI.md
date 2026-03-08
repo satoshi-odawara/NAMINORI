@@ -372,14 +372,15 @@ jobs:
 
 ### 19.3 完了定義（Definition of Done）
 
-イシューの完了時は、以下の順序を**狂いなく**実行すること。ドキュメントの更新漏れを防ぐため、必ず「すべての変更をステージングしてから」コミットして下さい。
+イシューの完了時は、以下の順序を**狂いなく**実行すること。テストの失敗やドキュメントの更新漏れを防ぐため、必ず「すべての検証が完了してから」ステージングとコミットを行って下さい。
 
 1. **[Developer]**：コードの実装。
-2. **[QA/Expert]**：コードレビュー。
-3. **[Documentation]**：`docs/` 内の関連資料（ユーザーガイド、技術資料）の更新。
-4. **[Architect]**：`ISSUES.md` を [CLOSED] に更新、および `development_plan.txt` の進捗を更新。
-5. **[System]**：`git add .` を実行。
-6. **[System]**：`git commit -m "feat: [ISSUE-ID] 概要"` を実行。
+2. **[Developer/QA]**：**全単体テストおよび統合テストの実行 (`python -m pytest --cov=src`)。すべてのテストがパスし、かつカバレッジが低下していないことを確認する。**
+3. **[QA/Expert]**：コードレビュー（信号処理の妥当性、物理的な数値の正しさの厳格な審査）。
+4. **[Documentation]**：`docs/` 内の関連資料（ユーザーガイド、技術資料）の更新。
+5. **[Architect]**：`ISSUES.md` を [CLOSED] に更新、および `development_plan.txt` の進捗を更新。
+6. **[System]**：`git add .` を実行。
+7. **[System]**：`git commit -m "feat: [ISSUE-ID] summary"` を実行。
 
 ### 19.4 自律実行時の動作
 

@@ -50,6 +50,7 @@ def load_mt_space_into_session(space_name):
     if space_data:
         st.session_state.mt_space.mean_vector = space_data["mean_vector"]
         st.session_state.mt_space.inverse_covariance_matrix = space_data["inverse_covariance_matrix"]
+        st.session_state.mt_space.average_magnitude_spectrum = space_data.get("average_magnitude_spectrum") # Load average spectrum
         st.session_state.mt_space.is_provisional = False
         st.session_state.mt_space.normal_samples_vectors = [np.zeros(15)] * space_data["sample_count"]
         return True
@@ -187,6 +188,34 @@ if page_selection == "通常解析":
     if uploaded_files:
         summary_results = []
         
+        # Physical validity: Add a reference row from the established unit space if available
+        if 'mt_space' in st.session_state and st.session_state.mt_space.mean_vector is not None:
+            mv = st.session_state.mt_space.mean_vector
+            # The indices must match VibrationFeatures.to_vector() exactly
+            # [rms, peak, kurtosis, skewness, crest_factor, shape_factor, power_low, power_mid, power_high, spectral_centroid, spectral_spread, spectral_entropy, overall_level, overall_low, overall_high]
+            summary_results.append({
+                "ファイル名": f"🔵 [基準] {st.session_state.get('load_mt_space_name', '単位空間')}",
+                "MD値": "1.00",
+                "判定": "🟢 基準",
+                "信頼度": "100.0%",
+                "RMS": f"{mv[0]:.3f}",
+                "Overall": f"{mv[12]:.3f}",
+                "OA(LF)": f"{mv[13]:.3f}",
+                "OA(HF)": f"{mv[14]:.3f}",
+                "Peak": f"{mv[1]:.3f}",
+                "尖度": f"{mv[2]:.2f}",
+                "歪度": f"{mv[3]:.2f}",
+                "CrestFactor": f"{mv[4]:.2f}",
+                "ShapeFactor": f"{mv[5]:.2f}",
+                "重心周波数": f"{mv[9]:.1f}",
+                "周波数分散": f"{mv[10]:.1f}",
+                "スペクトルエントロピー": f"{mv[11]:.3f}",
+                "S/N比(dB)": "-",
+                "クリッピング": "-",
+                "データ長(s)": "-",
+                "fs(Hz)": "-"
+            })
+
         # Process all files for the summary table
         st.subheader("📋 診断サマリー")
         progress_bar = st.progress(0)
@@ -301,11 +330,11 @@ if page_selection == "通常解析":
 
         if build_btn:
             norm_features_list = []
+            norm_magnitude_list = [] # Added to collect spectra for physical reference
             construction_progress = st.progress(0)
 
             for i, uploaded_file in enumerate(uploaded_files):
                 # ... (Features extraction logic)
-
                 file_extension = uploaded_file.name.split('.')[-1].lower()
                 with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_extension}") as tmp_file:
                     tmp_file.write(uploaded_file.getvalue())
@@ -338,14 +367,16 @@ if page_selection == "通常解析":
                     _, mags, f_feat = calculate_fft_features(p_tmp, fs_tmp, st.session_state.get("eval_window", WindowFunction.HANNING))
                     all_f = VibrationFeatures(**asdict(t_feat), **f_feat)
                     norm_features_list.append(all_f)
+                    norm_magnitude_list.append(mags) # Store magnitude spectrum for averaging
                 except Exception as e:
                     st.error(f"ファイル '{uploaded_file.name}' からの特徴量抽出に失敗しました: {e}")
                 finally:
                     if os.path.exists(tmp_path): os.remove(tmp_path)
                 construction_progress.progress((i + 1) / len(uploaded_files))
             
-            if len(norm_features_list) >= 2: # MT法には最低2サンプル必要（実際は10以上推奨）
-                st.session_state.mt_space.build_unit_space(norm_features_list)
+            if len(norm_features_list) >= 2:
+                # Call with both features and magnitude spectra (Fix for TypeError)
+                st.session_state.mt_space.build_unit_space(norm_features_list, norm_magnitude_list)
                 st.sidebar.success(f"✅ {len(norm_features_list)} 個のファイルを用いて単位空間を構築しました。")
                 
                 # Auto-save if name provided
@@ -505,6 +536,9 @@ if page_selection == "通常解析":
             fft_log_x = st.sidebar.checkbox("FFT周波数軸を対数にする", value=False, key="fft_log_x")
             show_raw_signal = st.sidebar.checkbox("生信号(DC除去のみ)を表示する", value=True, key="show_raw_signal")
             spec_nperseg = st.sidebar.select_slider("スペクトログラム解像度 (Window Size)", options=[128, 256, 512, 1024, 2048], value=512, key="spec_nperseg")
+
+            # Physical validity: Nyquist frequency is half of the sampling rate
+            nyquist = fs_hz / 2.0
 
             # Physical validity: Retrieve config values from session state (updated by sidebar)
             quantity = st.session_state.get("eval_quantity", SignalQuantity.ACCEL)
@@ -666,6 +700,23 @@ if page_selection == "通常解析":
                             fig_fft.add_trace(go.Scatter(x=f_comp, y=m_comp, mode='lines', name=f'軸: {col_name}', opacity=0.4))
 
                     fig_fft.add_trace(go.Scatter(x=plot_freqs, y=plot_mags, mode='lines', name='解析対象信号', line=dict(color='blue', width=2)))
+                    
+                    # Physical validity: Overlay reference spectrum if available and matching length
+                    if 'mt_space' in st.session_state and st.session_state.mt_space.average_magnitude_spectrum is not None:
+                        ref_mags_raw = st.session_state.mt_space.average_magnitude_spectrum
+                        
+                        # Guard: Only plot if frequency resolution matches (length of spectrum)
+                        if len(ref_mags_raw) == len(freqs):
+                            plot_ref_mags = ref_mags_raw[::step_f] if len(ref_mags_raw) > MAX_POINTS else ref_mags_raw
+                            
+                            fig_fft.add_trace(go.Scatter(
+                                x=plot_freqs, y=plot_ref_mags, 
+                                mode='lines', 
+                                name=f'基準: {st.session_state.get("load_mt_space_name", "単位空間")}', 
+                                line=dict(color='rgba(100, 100, 100, 0.6)', width=1.5, dash='dot')
+                            ))
+                        else:
+                            st.caption(f"ℹ️ 基準スペクトルと現在の解析条件（窓長等）が異なるため、重ね合わせをスキップしました (Ref:{len(ref_mags_raw)}, Cur:{len(freqs)})")
                     
                     # Add vertical lines for Filter Cutoffs
                     if config.hpf_enabled and config.highpass_hz:
