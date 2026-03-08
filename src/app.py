@@ -781,12 +781,13 @@ if page_selection == "通常解析":
 
                     fig_fft.add_trace(go.Scatter(x=plot_freqs, y=plot_mags, mode='lines', name='解析対象信号', line=dict(color='blue', width=2)))
                     
-                    # Physical validity: Overlay reference spectrum if available and matching length
+                    # Physical validity: Overlay reference spectrum and calculate difference
                     if 'mt_space' in st.session_state and st.session_state.mt_space.average_magnitude_spectrum is not None:
                         ref_mags_raw = st.session_state.mt_space.average_magnitude_spectrum
                         
                         # Guard: Only plot if frequency resolution matches (length of spectrum)
                         if len(ref_mags_raw) == len(freqs):
+                            # Downsample logic to match plot_freqs
                             plot_ref_mags = ref_mags_raw[::step_f] if len(ref_mags_raw) > MAX_POINTS else ref_mags_raw
                             
                             fig_fft.add_trace(go.Scatter(
@@ -794,6 +795,21 @@ if page_selection == "通常解析":
                                 mode='lines', 
                                 name=f'基準: {st.session_state.get("load_mt_space_name", "単位空間")}', 
                                 line=dict(color='rgba(100, 100, 100, 0.6)', width=1.5, dash='dot')
+                            ))
+
+                            # --- Anomaly Signature (Difference Spectrum) ---
+                            # Calculate delta: Current - Reference (only positive increases)
+                            # This helps focus on added energy/vibration.
+                            diff_mags_raw = np.maximum(0, mags - ref_mags_raw)
+                            plot_diff_mags = diff_mags_raw[::step_f] if len(diff_mags_raw) > MAX_POINTS else diff_mags_raw
+                            
+                            fig_fft.add_trace(go.Scatter(
+                                x=plot_freqs, y=plot_diff_mags,
+                                fill='tozeroy', # Fill area from 0 to Y
+                                mode='lines',
+                                name='異常成分 (増大分)',
+                                line=dict(color='rgba(255, 0, 0, 0.3)', width=0.5),
+                                fillcolor='rgba(255, 0, 0, 0.2)'
                             ))
                         else:
                             st.caption(f"ℹ️ 基準スペクトルと現在の解析条件（窓長等）が異なるため、重ね合わせをスキップしました (Ref:{len(ref_mags_raw)}, Cur:{len(freqs)})")
