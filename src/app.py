@@ -168,22 +168,28 @@ if page_selection == "通常解析":
     st.sidebar.header("🔬 解析設定")
     
     with st.sidebar.expander("基本設定", expanded=True):
+        # Physical validity: Ensure session values are Enum types even if loaded as strings
+        q_val = st.session_state.get("eval_quantity", SignalQuantity.ACCEL)
+        if isinstance(q_val, str): q_val = SignalQuantity(q_val)
+        
         st.session_state.eval_quantity = st.selectbox(
             "物理量種別", 
             list(SignalQuantity), 
             format_func=lambda x: x.value,
-            key="eval_quantity_selector", # Use different key to avoid direct state sync issues if needed
-            index=list(SignalQuantity).index(st.session_state.get("eval_quantity", SignalQuantity.ACCEL))
+            key="eval_quantity_selector",
+            index=list(SignalQuantity).index(q_val)
         )
-        # Sync back to canonical state
         st.session_state.eval_quantity = st.session_state.eval_quantity_selector
+
+        w_val = st.session_state.get("eval_window", WindowFunction.HANNING)
+        if isinstance(w_val, str): w_val = WindowFunction(w_val)
 
         st.session_state.eval_window = st.selectbox(
             "窓関数", 
             list(WindowFunction), 
             format_func=lambda x: x.value,
             key="eval_window_selector",
-            index=list(WindowFunction).index(st.session_state.get("eval_window", WindowFunction.HANNING))
+            index=list(WindowFunction).index(w_val)
         )
         st.session_state.eval_window = st.session_state.eval_window_selector
 
