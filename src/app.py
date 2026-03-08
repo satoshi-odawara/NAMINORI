@@ -893,6 +893,62 @@ if page_selection == "通常解析":
                             )
                             st.plotly_chart(fig_c, width='stretch')
 
+                    # --- Anomaly Spectrogram (Difference between Current and Baseline) ---
+                    if 'mt_space' in st.session_state and st.session_state.mt_space.average_magnitude_spectrum is not None:
+                        ref_mags_raw = st.session_state.mt_space.average_magnitude_spectrum
+                        
+                        # Guard: Check length alignment (number of frequency bins)
+                        if len(ref_mags_raw) == len(spec_f):
+                            st.markdown("---")
+                            st.subheader("⚠️ 異常成分スペクトログラム (基準値からの増大分)")
+                            st.caption("正常時（基準）の振幅を超えた成分のみを抽出しています。過渡的な異音や突発的な振動の特定に有効です。")
+                            
+                            # Physical validity: Scaling correction to align Spectrogram power with FFT magnitude
+                            # scipy.signal.spectrogram uses normalized PSD scaling. 
+                            # To compare with our FFT magnitude, we convert back.
+                            # M_spec_linear = sqrt(Sxx) * scaling_correction
+                            # scaling_correction derived from feature_extraction.py normalization:
+                            # alpha = sqrt(nperseg * sum(win**2)) / sum(win)
+                            N_seg = spec_nperseg
+                            if config.window == WindowFunction.HANNING:
+                                win_seg = np.hanning(N_seg)
+                            else:
+                                win_seg = signal.windows.flattop(N_seg)
+                            
+                            scaling_corr = np.sqrt(N_seg * np.sum(win_seg**2)) / np.sum(win_seg)
+                            
+                            # Convert current spectrogram power to magnitude
+                            Sxx_mag = np.sqrt(Sxx) * scaling_corr
+                            
+                            # Broadcast reference spectrum (1D) across time axis (2D)
+                            # ref_mags_raw is frequency axis. Sxx_mag is (freq, time)
+                            ref_broadcast = ref_mags_raw[:, np.newaxis]
+                            
+                            # Calculate Delta: Only positive increases
+                            Sxx_diff = np.maximum(0, Sxx_mag - ref_broadcast)
+                            
+                            # Convert back to dB for visualization (relative to 1 unit)
+                            Sxx_diff_db = 20 * np.log10(Sxx_diff + 1e-12)
+                            
+                            fig_diff = go.Figure(data=go.Heatmap(
+                                x=spec_t, y=spec_f, z=Sxx_diff_db,
+                                colorscale='Reds', # Use Red scale to emphasize anomalies
+                                colorbar=dict(title=f"Delta (dB rel. {unit})")
+                            ))
+                            
+                            fig_diff.update_layout(
+                                title=f"Anomaly Signature (Increases relative to {st.session_state.get('load_mt_space_name', 'Baseline')})",
+                                xaxis_title="時間 (s)",
+                                yaxis_title="周波数 (Hz)",
+                                yaxis_type="log" if fft_log_x else "linear",
+                                height=500,
+                                margin=dict(l=20, r=20, t=40, b=20)
+                            )
+                            st.plotly_chart(fig_diff, width='stretch')
+                        else:
+                            # Already handled by caption in FFT tab, but can add info here
+                            pass
+
         except Exception as e:
             st.error(f"解析エラー: {e}")
         finally:
