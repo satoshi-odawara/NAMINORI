@@ -6,7 +6,8 @@ This documentation aims to provide comprehensive guides for users, developers, a
 
 ## Table of Contents
 
-*   [User Guide](user_guide.md)
+*   [User Guide (English)](user_guide.md)
+*   [ユーザーガイド (日本語)](user_guide_jp.md)
 *   [Plugin Development Guide](plugins/custom_plugins.md)
 *   [Evaluation and Benchmarking Framework](evaluation.md)
 *   [Technical Architecture Overview](architecture.md)

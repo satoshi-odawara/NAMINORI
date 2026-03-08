@@ -28,6 +28,8 @@
 
 3. [QA/Expert]（技術審査官）:信号処理の妥当性（窓関数、フィルタ設定、積分処理）、MT法計算の安定性、および物理的な数値の正しさを厳格にレビューする。実装が規約（GEMINI.md）に違反している場合、[Developer] に修正を命じる。
 
+4. [Documentation]（ドキュメント担当）:新機能や変更点に基づき、`docs/` 内のユーザーガイドや技術資料を常に最新の状態に保つ。開発者以外（現場利用者）にも伝わる平易で正確な記述に責任を持つ。
+
 ---
 
 ## 2. 技術スタック
@@ -372,9 +374,10 @@ jobs:
 
 1. **[Developer]**：コードの実装。
 2. **[QA/Expert]**：コードレビュー。
-3. **[Architect]**：`ISSUES.md` を [CLOSED] に更新、および `development_plan.txt` の進捗を更新。
-4. **[System]**：`git add .` を実行（これにより、コードとISSUESの両方の変更がインデックスに入る）。
-5. **[System]**：`git commit -m "feat: [ISSUE-ID] 概要"` を実行。
+3. **[Documentation]**：`docs/` 内の関連資料（ユーザーガイド、技術資料）の更新。
+4. **[Architect]**：`ISSUES.md` を [CLOSED] に更新、および `development_plan.txt` の進捗を更新。
+5. **[System]**：`git add .` を実行。
+6. **[System]**：`git commit -m "feat: [ISSUE-ID] 概要"` を実行。
 
 ### 19.4 自律実行時の動作
 
