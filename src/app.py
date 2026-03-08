@@ -894,6 +894,7 @@ if page_selection == "通常解析":
                             st.plotly_chart(fig_c, width='stretch')
 
                     # --- Anomaly Spectrogram (Difference between Current and Baseline) ---
+                    # Physical validity: This should be outside 'if column_data_map' to show for WAV files too.
                     if 'mt_space' in st.session_state and st.session_state.mt_space.average_magnitude_spectrum is not None:
                         ref_mags_raw = st.session_state.mt_space.average_magnitude_spectrum
                         
@@ -904,10 +905,6 @@ if page_selection == "通常解析":
                             st.caption("正常時（基準）の振幅を超えた成分のみを抽出しています。過渡的な異音や突発的な振動の特定に有効です。")
                             
                             # Physical validity: Scaling correction to align Spectrogram power with FFT magnitude
-                            # scipy.signal.spectrogram uses normalized PSD scaling. 
-                            # To compare with our FFT magnitude, we convert back.
-                            # M_spec_linear = sqrt(Sxx) * scaling_correction
-                            # scaling_correction derived from feature_extraction.py normalization:
                             # alpha = sqrt(nperseg * sum(win**2)) / sum(win)
                             N_seg = spec_nperseg
                             if config.window == WindowFunction.HANNING:
@@ -921,7 +918,6 @@ if page_selection == "通常解析":
                             Sxx_mag = np.sqrt(Sxx) * scaling_corr
                             
                             # Broadcast reference spectrum (1D) across time axis (2D)
-                            # ref_mags_raw is frequency axis. Sxx_mag is (freq, time)
                             ref_broadcast = ref_mags_raw[:, np.newaxis]
                             
                             # Calculate Delta: Only positive increases
@@ -946,7 +942,7 @@ if page_selection == "通常解析":
                             )
                             st.plotly_chart(fig_diff, width='stretch')
                         else:
-                            # Already handled by caption in FFT tab, but can add info here
+                            # If lengths don't match, we can't subtract. This happens if spec_nperseg changes.
                             pass
 
         except Exception as e:
