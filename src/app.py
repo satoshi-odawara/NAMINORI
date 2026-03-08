@@ -233,6 +233,59 @@ if page_selection == "通常解析":
             progress_bar.progress((i + 1) / len(uploaded_files))
         
         st.dataframe(pd.DataFrame(summary_results), width='stretch')
+        
+        # --- Multi-file Unit Space Construction ---
+        st.markdown("##### 🛠️ MT法 単位空間の一括構築")
+        if st.button("📥 現在の全ファイルを正常データ（単位空間）として登録", help="現在アップロードされているすべてのファイルから特徴量を抽出し、MT法の基準となる『単位空間』を構築します。"):
+            norm_features_list = []
+            construction_progress = st.progress(0)
+            
+            for i, uploaded_file in enumerate(uploaded_files):
+                file_extension = uploaded_file.name.split('.')[-1].lower()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_extension}") as tmp_file:
+                    tmp_file.write(uploaded_file.getvalue())
+                    tmp_path = tmp_file.name
+                
+                try:
+                    # Same logic as summary to extract features
+                    if file_extension == "wav":
+                        fs_tmp, data_tmp, _ = load_wav_file(tmp_path)
+                    else:
+                        df_tmp = pd.read_csv(tmp_path, nrows=5, skipinitialspace=True)
+                        df_tmp.columns = [c.strip() for c in df_tmp.columns]
+                        selected_cols = st.session_state.get("csv_data_columns", [])
+                        active_cols = [c for c in selected_cols if c in df_tmp.columns]
+                        if not active_cols: active_cols = csv_parser.infer_vibration_columns(df_tmp.columns.tolist())
+                        if not active_cols:
+                            potential = df_tmp.select_dtypes(include=np.number).columns.tolist()
+                            active_cols = [potential[0]] if potential else [df_tmp.columns[0]]
+                        s_fs = st.session_state.get("csv_sampling_frequency", 1000.0)
+                        s_ts = st.session_state.get("csv_timestamp_column") if st.session_state.get("csv_use_timestamp") else None
+                        s_syn = st.session_state.get("csv_synthesize", False)
+                        s_main_axis = st.session_state.get("csv_main_axis_selection")
+                        data_tmp, fs_tmp, col_map_tmp = csv_parser.parse_csv_data(Path(tmp_path), data_columns=active_cols, sampling_frequency_hz=s_fs, timestamp_column=s_ts, synthesize=s_syn)
+                        if not s_syn and s_main_axis and col_map_tmp and s_main_axis in col_map_tmp:
+                            data_tmp = col_map_tmp[s_main_axis]
+                    
+                    p_tmp = remove_dc_offset(data_tmp)
+                    p_tmp = apply_butterworth_filter(p_tmp, fs_tmp, st.session_state.get("eval_hpf"), st.session_state.get("eval_lpf"), st.session_state.get("eval_order", 4), hpf_enabled=st.session_state.get("eval_hpf_enabled", False), lpf_enabled=st.session_state.get("eval_lpf_enabled", False))
+                    t_feat = calculate_time_domain_features(p_tmp)
+                    _, mags, f_feat = calculate_fft_features(p_tmp, fs_tmp, st.session_state.get("eval_window", WindowFunction.HANNING))
+                    all_f = VibrationFeatures(**asdict(t_feat), **f_feat)
+                    norm_features_list.append(all_f)
+                except Exception as e:
+                    st.error(f"ファイル '{uploaded_file.name}' からの特徴量抽出に失敗しました: {e}")
+                finally:
+                    if os.path.exists(tmp_path): os.remove(tmp_path)
+                construction_progress.progress((i + 1) / len(uploaded_files))
+            
+            if len(norm_features_list) >= 2: # MT法には最低2サンプル必要（実際は10以上推奨）
+                st.session_state.mt_space.build_unit_space(norm_features_list)
+                st.success(f"✅ {len(norm_features_list)} 個のファイルを用いて単位空間を構築しました。")
+                st.rerun()
+            else:
+                st.error("単位空間の構築には少なくとも2つ以上の有効なデータが必要です。")
+
         st.markdown("---")
 
         # We need a way to select which file to show details for

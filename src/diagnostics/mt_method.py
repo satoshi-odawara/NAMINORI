@@ -53,6 +53,14 @@ class MTSpace:
 
         self._update_unit_space()
 
+    def build_unit_space(self, features_list: List[VibrationFeatures]):
+        """
+        Builds the unit space from a list of VibrationFeatures.
+        This resets any previously added samples and builds a new unit space.
+        """
+        self.normal_samples_vectors = [f.to_vector() for f in features_list]
+        self._update_unit_space()
+
     def _update_unit_space(self):
         """
         Updates the mean vector, inverse covariance matrix, and averaged noise power spectrum
