@@ -12,6 +12,7 @@ import tempfile
 import os
 from datetime import datetime
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from scipy.signal import find_peaks
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
@@ -423,17 +424,101 @@ if page_selection == "通常解析":
             finally:
                 if os.path.exists(tmp_path): os.remove(tmp_path)
             
-            progress_bar.progress((i + 1) / len(uploaded_files))
+        # --- Summary Table and Clustering UI ---
+        df_summary = pd.DataFrame(summary_results)
+        X_all = np.array(all_f_vectors) # Physical validity: Pre-define feature matrix for both clustering and UI
         
-        st.dataframe(pd.DataFrame(summary_results), use_container_width=True)
+        col_sum1, col_sum2 = st.columns([2, 1])
+        with col_sum1:
+            st.subheader("📋 診断サマリー")
+        with col_sum2:
+            with st.expander("📊 自動グルーピング設定", expanded=False):
+                use_grouping = st.checkbox("グルーピングを有効化", value=False, help="似た性質のデータを自動でグループ分けし、表示を集約します。大量データ解析時に有効です。")
+                n_clusters = st.slider("グループ数", 2, 10, 3)
+                run_grouping = st.button("グルーピングを実行/更新")
+
+        # Perform clustering if requested
+        X_all = np.array(all_f_vectors) 
+        cluster_labels = st.session_state.get('last_cluster_labels')
+        
+        if use_grouping:
+            # Check if we need to run or re-run clustering
+            # We run if button is pressed OR if we don't have labels yet
+            if run_grouping or cluster_labels is None or len(cluster_labels) != len(all_f_vectors):
+                try:
+                    with st.spinner("グループ分類を計算中..."):
+                        # Physical validity: Use ONLY Band RMS (last 8 features) for intuitive clustering
+                        X_cluster = X_all[:, 15:] # Extract only Band RMS components
+                        
+                        # Standardize before K-Means
+                        X_scaled = StandardScaler().fit_transform(X_cluster)
+                        kmeans = KMeans(n_clusters=n_clusters, n_init=10, random_state=42)
+                        cluster_labels = kmeans.fit_predict(X_scaled)
+                        
+                        # Save to session state to persist across UI refreshes
+                        st.session_state.last_cluster_labels = cluster_labels
+                        st.session_state.last_cluster_n = n_clusters
+                except Exception as e:
+                    st.error(f"グルーピング計算中にエラーが発生しました: {e}")
+                    use_grouping = False
+            
+            # Apply labels to summary dataframe
+            if cluster_labels is not None:
+                df_summary['Cluster'] = cluster_labels
+        else:
+            # Clear stored labels if feature is disabled
+            if 'last_cluster_labels' in st.session_state:
+                del st.session_state.last_cluster_labels
+            cluster_labels = None
+
+        if not use_grouping or cluster_labels is None:
+            st.dataframe(df_summary, use_container_width=True)
+        else:
+            st.info(f"💡 周波数帯域別の特性（Band RMS）に基づき、データを {st.session_state.get('last_cluster_n', n_clusters)} 個のグループに分類しました。")
+            
+            # Aggregated view per cluster
+            for c_id in range(n_clusters):
+                cluster_df = df_summary[df_summary['Cluster'] == c_id]
+                count = len(cluster_df)
+                
+                # Calculate cluster-wide statistics
+                is_ref_cluster = any(cluster_df["ファイル名"].str.contains("🔵 \[基準\]"))
+                avg_md = cluster_df[cluster_df["MD値"] != "-"]["MD値"].astype(float).mean() if not cluster_df[cluster_df["MD値"] != "-"].empty else 1.0
+                
+                header_text = f"Group {c_id+1}: {count} 件 "
+                header_text += "(正常群/基準を含む)" if is_ref_cluster else f"(平均MD: {avg_md:.2f})"
+                
+                with st.expander(header_text):
+                    # Visual representation of the cluster profile (Band RMS)
+                    cluster_indices = cluster_df.index
+                    # Get average Band RMS for this cluster
+                    avg_band_rms = X_all[cluster_indices, 15:].mean(axis=0)
+                    
+                    col_prof1, col_prof2 = st.columns([1, 2])
+                    with col_prof1:
+                        st.markdown("**グループ特性 (Band RMS)**")
+                        fig_prof = go.Figure(data=[go.Bar(
+                            x=[f"B{i+1}" for i in range(8)],
+                            y=avg_band_rms,
+                            marker_color='rgb(55, 83, 109)'
+                        )])
+                        fig_prof.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), xaxis_title="帯域", yaxis_title="RMS")
+                        st.plotly_chart(fig_prof, use_container_width=True)
+                    
+                    with col_prof2:
+                        st.write(f"このグループに含まれるデータ（上位10件を表示）:")
+                        st.dataframe(cluster_df.head(10), use_container_width=True)
+                        if count > 10:
+                            st.caption(f"...他 {count-10} 件のデータが含まれています。")
 
         # --- Advanced Trend Analysis ---
         if len(all_f_vectors) >= 2:
             st.subheader("📈 傾向分析 (データセット全体の俯瞰解析)")
             
-            # Physical validity: Get unit for the current quantity to avoid NameError
+            # Physical validity: Get unit and feature names for common use in tabs
             current_q = st.session_state.get("eval_quantity", SignalQuantity.ACCEL)
-            unit = current_q.unit_str if hasattr(current_q, 'unit_str') else current_q.value # Handle both Enum and raw value if necessary
+            unit = current_q.unit_str if hasattr(current_q, 'unit_str') else current_q.value
+            feature_names = VibrationFeatures.get_feature_names()
             
             tab_trend1, tab_trend_diff, tab_trend2, tab_trend3, tab_trend4 = st.tabs([
                 "🌈 全データ周波数ヒートマップ", 
@@ -463,10 +548,20 @@ if page_selection == "通常解析":
                     
                     heatmap_array_db = 20 * np.log10(np.array(heatmap_data) + 1e-12)
                     
+                    # Sort heatmap by cluster if active
+                    y_labels = all_filenames
+                    z_data = heatmap_array_db
+                    if cluster_labels is not None:
+                        sort_idx = np.argsort(cluster_labels)
+                        # Physical validity: Enhance labels with Group ID for clear attribution
+                        y_labels = [f"[G{cluster_labels[i]+1}] {all_filenames[i]}" for i in sort_idx]
+                        z_data = heatmap_array_db[sort_idx]
+                        st.caption("※ グルーピング有効時のため、ファイルをグループ順に並べ替え、ラベルに [G番号] を付与しています。")
+
                     fig_heat = go.Figure(data=go.Heatmap(
                         x=common_freq_grid,
-                        y=all_filenames,
-                        z=heatmap_array_db,
+                        y=y_labels,
+                        z=z_data,
                         colorscale='Viridis',
                         colorbar=dict(title="振幅 (dB)")
                     ))
@@ -497,11 +592,18 @@ if page_selection == "通常解析":
                         m_db = 20 * np.log10(m_interp + 1e-12)
                         diff_heatmap_data.append(m_db - ref_db)
                     
+                    diff_array = np.array(diff_heatmap_data)
+                    y_labels_diff = all_filenames
+                    if cluster_labels is not None:
+                        sort_idx = np.argsort(cluster_labels)
+                        y_labels_diff = [f"[G{cluster_labels[i]+1}] {all_filenames[i]}" for i in sort_idx]
+                        diff_array = diff_array[sort_idx]
+
                     max_diff = 40.0
                     fig_heat_diff = go.Figure(data=go.Heatmap(
                         x=common_freq_grid,
-                        y=all_filenames,
-                        z=np.array(diff_heatmap_data),
+                        y=y_labels_diff,
+                        z=diff_array,
                         colorscale='RdBu_r',
                         zmid=0, zmin=-max_diff, zmax=max_diff,
                         colorbar=dict(title="差分 (dB)")
@@ -521,13 +623,6 @@ if page_selection == "通常解析":
                 st.caption("15種類の特徴量を2次元に圧縮して表示します。矢印（ベクトル）は各特徴量がどの方向に影響を与えているかを示します。")
                 
                 try:
-                    # Feature names for Biplot
-                    feature_names = [
-                        "RMS", "Peak", "Kurtosis", "Skewness", "CrestFactor", "ShapeFactor",
-                        "Power(Low)", "Power(Mid)", "Power(High)", "Centroid", "Spread", "Entropy",
-                        "Overall", "OA(LF)", "OA(HF)"
-                    ]
-
                     scaler = StandardScaler()
                     X_scaled = scaler.fit_transform(np.array(all_f_vectors))
                     
@@ -537,39 +632,54 @@ if page_selection == "通常解析":
                     pca_df = pd.DataFrame(X_pca, columns=['PC1', 'PC2'])
                     pca_df['FileName'] = all_filenames
                     pca_df['MD'] = all_mds
+                    if cluster_labels is not None:
+                        pca_df['Cluster'] = [f"Group {c+1}" for c in cluster_labels]
                     
                     var_exp = pca.explained_variance_ratio_
                     
                     fig_pca = go.Figure()
                     
-                    # Scatter plot for samples
-                    fig_pca.add_trace(go.Scatter(
-                        x=pca_df['PC1'],
-                        y=pca_df['PC2'],
-                        mode='markers+text',
-                        text=pca_df['FileName'],
-                        textposition="top center",
-                        marker=dict(
-                            size=12,
-                            color=pca_df['MD'],
-                            colorscale='Reds',
-                            showscale=True,
-                            colorbar=dict(title="MD値 (異常度)"),
-                            line=dict(width=1, color='DarkSlateGrey')
-                        ),
-                        name="データ点",
-                        hovertemplate="<b>%{text}</b><br>PC1: %{x:.2f}<br>PC2: %{y:.2f}<br>MD: %{marker.color:.2f}<extra></extra>"
-                    ))
+                    # Color points by Cluster if available, else by MD
+                    color_col = 'Cluster' if cluster_labels is not None else 'MD'
+                    color_title = "グループ" if cluster_labels is not None else "MD値 (異常度)"
                     
-                    # Biplot: Add arrows for features
-                    # Scale factor for arrows to be visible on the same plot
+                    if cluster_labels is not None:
+                        # Categorical plot for clusters
+                        for group in sorted(pca_df['Cluster'].unique()):
+                            grp_df = pca_df[pca_df['Cluster'] == group]
+                            fig_pca.add_trace(go.Scatter(
+                                x=grp_df['PC1'], y=grp_df['PC2'],
+                                mode='markers',
+                                name=group,
+                                text=grp_df['FileName'],
+                                marker=dict(size=12, line=dict(width=1, color='DarkSlateGrey')),
+                                hovertemplate="<b>%{text}</b><br>PC1: %{x:.2f}<br>PC2: %{y:.2f}<extra></extra>"
+                            ))
+                    else:
+                        # Continuous plot for MD
+                        fig_pca.add_trace(go.Scatter(
+                            x=pca_df['PC1'],
+                            y=pca_df['PC2'],
+                            mode='markers',
+                            text=pca_df['FileName'],
+                            marker=dict(
+                                size=12,
+                                color=pca_df['MD'],
+                                colorscale='Reds',
+                                showscale=True,
+                                colorbar=dict(title=color_title),
+                                line=dict(width=1, color='DarkSlateGrey')
+                            ),
+                            hovertemplate="<b>%{text}</b><br>PC1: %{x:.2f}<br>PC2: %{y:.2f}<br>MD: %{marker.color:.2f}<extra></extra>"
+                        ))
+                    
+                    # Biplot: Add arrows for features (Base 15 only to avoid clutter)
                     scale_factor = np.max(np.abs(X_pca)) * 0.8
-                    loadings = pca.components_.T * scale_factor
+                    loadings = pca.components_.T[:15] * scale_factor # Use only first 15 base features
                     
                     for i, (lx, ly) in enumerate(loadings):
                         fig_pca.add_trace(go.Scatter(
-                            x=[0, lx],
-                            y=[0, ly],
+                            x=[0, lx], y=[0, ly],
                             mode='lines+text',
                             line=dict(color='rgba(100, 100, 100, 0.5)', width=1),
                             text=["", feature_names[i]],
@@ -577,7 +687,6 @@ if page_selection == "通常解析":
                             showlegend=False,
                             hoverinfo='skip'
                         ))
-                        # Add arrowhead
                         fig_pca.add_annotation(
                             x=lx, y=ly, ax=0, ay=0,
                             xref="x", yref="y", axref="x", ayref="y",
@@ -610,11 +719,17 @@ if page_selection == "通常解析":
                     
                     # Prepare DataFrame for Boxplot
                     box_data = []
-                    # Evaluation Data
                     for i, vec in enumerate(all_f_vectors):
                         is_ref = all_filenames[i].startswith("🔵 [基準]")
+                        if is_ref:
+                            group_name = "基準値"
+                        elif cluster_labels is not None:
+                            group_name = f"Group {cluster_labels[i]+1}"
+                        else:
+                            group_name = "評価データ"
+                            
                         box_data.append({
-                            "グループ": "基準値" if is_ref else "評価データ",
+                            "グループ": group_name,
                             "値": vec[feat_idx],
                             "ファイル名": all_filenames[i]
                         })
@@ -622,12 +737,21 @@ if page_selection == "通常解析":
                     df_box = pd.DataFrame(box_data)
                     
                     fig_box = go.Figure()
-                    for group in ["基準値", "評価データ"]:
+                    # Determine groups to plot: Reference first, then Clusters or Evaluation Data
+                    plot_groups = ["基準値"]
+                    if cluster_labels is not None:
+                        plot_groups += [f"Group {c+1}" for c in range(n_clusters)]
+                    else:
+                        plot_groups.append("評価データ")
+
+                    for group in plot_groups:
                         group_df = df_box[df_box["グループ"] == group]
+                        if group_df.empty: continue
+                        
                         fig_box.add_trace(go.Box(
                             y=group_df["値"],
                             name=group,
-                            boxmean='sd', # Show mean and SD
+                            boxmean='sd',
                             jitter=0.3,
                             pointpos=-1.8,
                             boxpoints='all',
@@ -644,47 +768,148 @@ if page_selection == "通常解析":
                     st.info("分布比較を行うには、基準データまたは複数のアップロードデータが必要です。")
 
             with tab_trend4:
-                st.markdown("##### 劣化トレンド推移")
-                st.caption("データの順序に沿った変化を可視化します。異常度(MD値)や主要な物理量の時間的な変化を確認できます。")
+                st.markdown("##### 劣化トレンド推移 (指標選択・平滑化解析)")
+                st.caption("表示したい特徴量を選択してください。デフォルトはRMS（振動強さ）です。複数選択すると1つのグラフに重ねて表示されます。")
                 
-                trend_df = pd.DataFrame({
-                    "Index": range(len(all_filenames)),
-                    "ファイル名": all_filenames,
-                    "MD値": all_mds,
-                    "RMS": [v[0] for v in all_f_vectors]
-                })
-                # Exclude baseline from trend if possible to see pure sequence
-                trend_df_data = trend_df[~trend_df["ファイル名"].str.startswith("🔵 [基準]")]
-                
-                if not trend_df_data.empty:
-                    fig_trend = go.Figure()
-                    fig_trend.add_trace(go.Scatter(
-                        x=trend_df_data["Index"],
-                        y=trend_df_data["MD値"],
-                        mode='lines+markers',
-                        name='MD値 (異常度)',
-                        line=dict(color='red', width=2),
-                        yaxis="y1"
-                    ))
-                    fig_trend.add_trace(go.Scatter(
-                        x=trend_df_data["Index"],
-                        y=trend_df_data["RMS"],
-                        mode='lines+markers',
-                        name='RMS (振動強さ)',
-                        line=dict(color='blue', width=2, dash='dot'),
-                        yaxis="y2"
-                    ))
+                # Dynamic indicator selection
+                # Add MD to the list of features for selection
+                trend_features = ["MD値"] + feature_names
+                selected_trend_feats = st.multiselect(
+                    "プロットする指標を選択", 
+                    options=trend_features, 
+                    default=["RMS"]
+                )
+
+                trend_df_data_list = []
+                for i, vec in enumerate(all_f_vectors):
+                    if all_filenames[i].startswith("🔵 [基準]"): continue
                     
-                    fig_trend.update_layout(
-                        xaxis_title="データ順序 (ファイル順)",
-                        yaxis=dict(title=dict(text="MD値", font=dict(color="red")), tickfont=dict(color="red")),
-                        yaxis2=dict(title=dict(text=f"RMS ({unit})", font=dict(color="blue")), tickfont=dict(color="blue"), overlaying="y", side="right"),
-                        height=500,
-                        margin=dict(l=20, r=20, t=40, b=20),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                        hovermode="x unified"
-                    )
-                    st.plotly_chart(fig_trend, use_container_width=True)
+                    row = {
+                        "Index": i,
+                        "ファイル名": all_filenames[i],
+                        "MD値": all_mds[i]
+                    }
+                    # Add all other features to the row
+                    for f_idx, f_name in enumerate(feature_names):
+                        row[f_name] = vec[f_idx]
+                    trend_df_data_list.append(row)
+                
+                trend_df_data = pd.DataFrame(trend_df_data_list)
+                
+                if not trend_df_data.empty and selected_trend_feats:
+                    # Case A: Single Feature Selected -> Show Subplots (Global + Clusters)
+                    if len(selected_trend_feats) == 1:
+                        target_feat = selected_trend_feats[0]
+                        max_val = trend_df_data[target_feat].max() * 1.1
+                        # MD has a minimum logical limit of 10.0 for visualization
+                        if target_feat == "MD値": max_val = max(max_val, 10.0)
+                        
+                        plot_n_clusters = n_clusters if cluster_labels is not None else 0
+                        fig_trend = make_subplots(
+                            rows=1 + plot_n_clusters, cols=1,
+                            shared_xaxes=True,
+                            vertical_spacing=0.05,
+                            subplot_titles=[f"統合トレンド: {target_feat} (全体)"] + [f"Group {i+1} 個別トレンド" for i in range(plot_n_clusters)]
+                        )
+                        
+                        # Row 1: Global
+                        fig_trend.add_trace(go.Scatter(
+                            x=trend_df_data["Index"], y=trend_df_data[target_feat],
+                            mode='lines', name=f'{target_feat} (全体)',
+                            line=dict(color='rgba(150, 150, 150, 0.3)', width=1),
+                            showlegend=False
+                        ), row=1, col=1)
+                        
+                        if cluster_labels is not None:
+                            # Use cluster labels corresponding only to the non-baseline files
+                            # We need to filter cluster_labels to match trend_df_data
+                            # For simplicity, we'll assume the order matches because we skipped baseline
+                            # But to be robust, we'll use the original index from the row
+                            for c_id in range(n_clusters):
+                                c_mask = [cluster_labels[idx] == c_id for idx in trend_df_data["Index"]]
+                                c_df = trend_df_data[c_mask]
+                                if c_df.empty: continue
+                                
+                                # Integrated Plot Marker
+                                fig_trend.add_trace(go.Scatter(
+                                    x=c_df["Index"], y=c_df[target_feat],
+                                    mode='markers', name=f'Group {c_id+1}',
+                                    marker=dict(size=8, line=dict(width=1, color='DarkSlateGrey')),
+                                    text=c_df["ファイル名"]
+                                ), row=1, col=1)
+                                
+                                # Individual Rows
+                                fig_trend.add_trace(go.Scatter(
+                                    x=trend_df_data["Index"], y=trend_df_data[target_feat],
+                                    mode='markers', marker=dict(color='rgba(200, 200, 200, 0.2)', size=4),
+                                    showlegend=False, hoverinfo='skip'
+                                ), row=c_id+2, col=1)
+                                
+                                fig_trend.add_trace(go.Scatter(
+                                    x=c_df["Index"], y=c_df[target_feat],
+                                    mode='markers', name=f'G{c_id+1} 生データ',
+                                    marker=dict(size=8),
+                                    text=c_df["ファイル名"], showlegend=False
+                                ), row=c_id+2, col=1)
+                                
+                                # Moving Average
+                                if len(c_df) >= 2:
+                                    ma_val = c_df[target_feat].rolling(window=5, min_periods=1, center=True).mean()
+                                    fig_trend.add_trace(go.Scatter(
+                                        x=c_df["Index"], y=ma_val,
+                                        mode='lines', name=f'G{c_id+1} 傾向',
+                                        line=dict(width=3), opacity=0.8
+                                    ), row=c_id+2, col=1)
+                        else:
+                            fig_trend.add_trace(go.Scatter(
+                                x=trend_df_data["Index"], y=trend_df_data[target_feat],
+                                mode='markers', name=target_feat, marker=dict(color='red', size=8)
+                            ), row=1, col=1)
+                            ma_val_global = trend_df_data[target_feat].rolling(window=5, min_periods=1, center=True).mean()
+                            fig_trend.add_trace(go.Scatter(
+                                x=trend_df_data["Index"], y=ma_val_global,
+                                mode='lines', name='全体傾向', line=dict(color='red', width=3)
+                            ), row=1, col=1)
+
+                        fig_trend.update_layout(
+                            height=300 + (300 * plot_n_clusters),
+                            margin=dict(l=20, r=20, t=40, b=20),
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                            hovermode="x unified"
+                        )
+                        for i in range(1 + plot_n_clusters):
+                            feat_unit = unit if "RMS" in target_feat or "Overall" in target_feat or "Peak" in target_feat else ""
+                            y_title = f"{target_feat} ({feat_unit})" if feat_unit else target_feat
+                            fig_trend.update_yaxes(title_text=y_title, range=[0, max_val], row=i+1, col=1)
+                        
+                        fig_trend.update_xaxes(title_text="データ順序 (ファイル順)", row=1 + plot_n_clusters, col=1)
+                        st.plotly_chart(fig_trend, use_container_width=True)
+
+                    # Case B: Multiple Features Selected -> Show Unified Multi-axis Plot
+                    else:
+                        st.info("💡 複数指標が選択されたため、1つの統合グラフに表示します。グループ別のサブプロットを確認するには、指標を1つだけ選択してください。")
+                        fig_multi = go.Figure()
+                        
+                        for f_name in selected_trend_feats:
+                            # Normalize for comparison if multiple scales are involved? 
+                            # For now, just plot them.
+                            fig_multi.add_trace(go.Scatter(
+                                x=trend_df_data["Index"], y=trend_df_data[f_name],
+                                mode='lines+markers', name=f_name,
+                                hovertemplate=f"<b>{f_name}</b>: %{{y:.3f}}<extra></extra>"
+                            ))
+                        
+                        fig_multi.update_layout(
+                            xaxis_title="データ順序 (ファイル順)",
+                            yaxis_title="値 (各指標の単位)",
+                            height=600,
+                            margin=dict(l=20, r=20, t=40, b=20),
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                            hovermode="x unified"
+                        )
+                        st.plotly_chart(fig_multi, use_container_width=True)
+                elif not selected_trend_feats:
+                    st.warning("プロットする指標を少なくとも1つ選択してください。")
                 else:
                     st.info("トレンドを表示する評価データがありません。")
         # --- Multi-file Unit Space Construction ---
