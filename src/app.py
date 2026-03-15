@@ -429,6 +429,11 @@ if page_selection == "通常解析":
         # --- Advanced Trend Analysis ---
         if len(all_f_vectors) >= 2:
             st.subheader("📈 傾向分析 (データセット全体の俯瞰解析)")
+            
+            # Physical validity: Get unit for the current quantity to avoid NameError
+            current_q = st.session_state.get("eval_quantity", SignalQuantity.ACCEL)
+            unit = current_q.unit_str if hasattr(current_q, 'unit_str') else current_q.value # Handle both Enum and raw value if necessary
+            
             tab_trend1, tab_trend2, tab_trend3, tab_trend4 = st.tabs([
                 "🌈 全データ周波数ヒートマップ", 
                 "🧩 特徴量PCA分布 (類似度分析)", 
