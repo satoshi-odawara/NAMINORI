@@ -13,6 +13,8 @@ import os
 from datetime import datetime
 import plotly.graph_objects as go
 from scipy.signal import find_peaks
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 import json
 from dataclasses import asdict
 from src.core.signal_processing import load_wav_file, remove_dc_offset, apply_butterworth_filter
@@ -281,14 +283,19 @@ if page_selection == "通常解析":
 
     if uploaded_files:
         summary_results = []
+        all_mags = []
+        all_freqs = []
+        all_f_vectors = []
+        all_filenames = []
+        all_mds = []
         
         # Physical validity: Add a reference row from the established unit space if available
         if 'mt_space' in st.session_state and st.session_state.mt_space.mean_vector is not None:
             mv = st.session_state.mt_space.mean_vector
+            ref_name = f"🔵 [基準] {st.session_state.get('load_mt_space_name', '単位空間')}"
             # The indices must match VibrationFeatures.to_vector() exactly
-            # [rms, peak, kurtosis, skewness, crest_factor, shape_factor, power_low, power_mid, power_high, spectral_centroid, spectral_spread, spectral_entropy, overall_level, overall_low, overall_high]
             summary_results.append({
-                "ファイル名": f"🔵 [基準] {st.session_state.get('load_mt_space_name', '単位空間')}",
+                "ファイル名": ref_name,
                 "MD値": "1.00",
                 "判定": "🟢 基準",
                 "信頼度": "100.0%",
@@ -309,13 +316,17 @@ if page_selection == "通常解析":
                 "データ長(s)": "-",
                 "fs(Hz)": "-"
             })
+            all_f_vectors.append(mv)
+            all_filenames.append(ref_name)
+            all_mds.append(1.0)
+            if st.session_state.mt_space.average_magnitude_spectrum is not None:
+                all_mags.append(st.session_state.mt_space.average_magnitude_spectrum)
+                # We'll use the freq axis of the first uploaded file as a proxy for the baseline freq axis if they match FS
+                all_freqs.append(None) 
 
         # Process all files for the summary table
         st.subheader("📋 診断サマリー")
         progress_bar = st.progress(0)
-        
-        # Cache the processing results to avoid re-calculating everything on detail switch
-        # (For simplicity in this turn, we'll process the summary quickly)
         
         for i, uploaded_file in enumerate(uploaded_files):
             file_extension = uploaded_file.name.split('.')[-1].lower()
@@ -328,21 +339,16 @@ if page_selection == "通常解析":
                 if file_extension == "wav":
                     fs_tmp, data_tmp, _ = load_wav_file(tmp_path)
                 else:
-                    # Intelligent column and setting fallback for CSV summary
                     df_tmp = pd.read_csv(tmp_path, nrows=5, skipinitialspace=True)
-                    # Physical validity: Strip columns for robust matching
                     df_tmp.columns = [c.strip() for c in df_tmp.columns]
-                    # Use currently selected columns if they exist in this file, else infer
                     selected_cols = st.session_state.get("csv_data_columns", [])
                     active_cols = [c for c in selected_cols if c in df_tmp.columns]
                     if not active_cols:
                         active_cols = csv_parser.infer_vibration_columns(df_tmp.columns.tolist())
                     if not active_cols:
-                        # Find first numeric column that isn't 'Time'
                         potential = df_tmp.select_dtypes(include=np.number).columns.tolist()
                         active_cols = [potential[0]] if potential else [df_tmp.columns[0]]
                     
-                    # Use session settings for fs and synthesis
                     s_fs = st.session_state.get("csv_sampling_frequency", 1000.0)
                     s_ts = st.session_state.get("csv_timestamp_column") if st.session_state.get("csv_use_timestamp") else None
                     s_syn = st.session_state.get("csv_synthesize", False)
@@ -356,11 +362,9 @@ if page_selection == "通常解析":
                         synthesize=s_syn if len(active_cols) > 1 else False
                     )
                     
-                    # Apply main axis selection if synthesis is OFF
                     if not s_syn and s_main_axis and col_map_tmp and s_main_axis in col_map_tmp:
                         data_tmp = col_map_tmp[s_main_axis]
                 
-                # Apply current filter settings
                 p_tmp = remove_dc_offset(data_tmp)
                 p_tmp = apply_butterworth_filter(
                     p_tmp, fs_tmp, 
@@ -401,6 +405,14 @@ if page_selection == "通常解析":
                     "データ長(s)": f"{qual.data_length_s:.1f}",
                     "fs(Hz)": int(fs_tmp)
                 })
+
+                # Data collection for trend analysis
+                all_mags.append(mags)
+                all_freqs.append(f_hz)
+                all_f_vectors.append(all_f.to_vector())
+                all_filenames.append(uploaded_file.name)
+                all_mds.append(md if md is not None else 1.0)
+
             except Exception as e:
                 summary_results.append({
                     "ファイル名": uploaded_file.name, 
@@ -412,7 +424,100 @@ if page_selection == "通常解析":
             
             progress_bar.progress((i + 1) / len(uploaded_files))
         
-        st.dataframe(pd.DataFrame(summary_results), width='stretch')
+        st.dataframe(pd.DataFrame(summary_results), use_container_width=True)
+
+        # --- Advanced Trend Analysis ---
+        if len(all_f_vectors) >= 2:
+            st.subheader("📈 傾向分析 (データセット全体の俯瞰解析)")
+            tab_trend1, tab_trend2 = st.tabs(["🌈 全データ周波数ヒートマップ", "🧩 特徴量PCA分布 (類似度分析)"])
+            
+            with tab_trend1:
+                st.markdown("##### 複数データの周波数特性比較")
+                st.caption("全アップロードデータの周波数特性を並べて表示します。周波数帯ごとの変化や共通のピークを把握できます。")
+                
+                # Physical validity: Interpolate all spectra to a common frequency grid
+                # Determine max frequency range
+                valid_freqs = [f for f in all_freqs if f is not None]
+                if valid_freqs:
+                    max_nyquist = max([f[-1] for f in valid_freqs])
+                    common_freq_grid = np.linspace(0, max_nyquist, 1024)
+                    
+                    heatmap_data = []
+                    for m, f in zip(all_mags, all_freqs):
+                        if f is None: # Handle reference with missing freq axis
+                            f = valid_freqs[0] # Assume same as first file
+                        
+                        # Interpolate to common grid
+                        m_interp = np.interp(common_freq_grid, f, m)
+                        heatmap_data.append(m_interp)
+                    
+                    # Convert to dB for better visualization contrast
+                    heatmap_array_db = 20 * np.log10(np.array(heatmap_data) + 1e-12)
+                    
+                    fig_heat = go.Figure(data=go.Heatmap(
+                        x=common_freq_grid,
+                        y=all_filenames,
+                        z=heatmap_array_db,
+                        colorscale='Viridis',
+                        colorbar=dict(title="振幅 (dB)")
+                    ))
+                    fig_heat.update_layout(
+                        xaxis_title="周波数 (Hz)",
+                        yaxis_title="ファイル名",
+                        height=max(400, len(all_filenames) * 20),
+                        margin=dict(l=20, r=20, t=20, b=20)
+                    )
+                    st.plotly_chart(fig_heat, use_container_width=True)
+                else:
+                    st.warning("周波数データの収集に失敗したため、ヒートマップを表示できません。")
+
+            with tab_trend2:
+                st.markdown("##### 特徴量空間におけるデータの類似度")
+                st.caption("15種類の特徴量を2次元に圧縮して表示します。近くにある点は特性が似ており、遠くにある点は性質が異なることを意味します。")
+                
+                try:
+                    # StandardScaler requires at least 2 samples
+                    scaler = StandardScaler()
+                    X_scaled = scaler.fit_transform(np.array(all_f_vectors))
+                    
+                    pca = PCA(n_components=2)
+                    X_pca = pca.fit_transform(X_scaled)
+                    
+                    pca_df = pd.DataFrame(X_pca, columns=['PC1', 'PC2'])
+                    pca_df['FileName'] = all_filenames
+                    pca_df['MD'] = all_mds
+                    
+                    # Explained variance for physical validity
+                    var_exp = pca.explained_variance_ratio_
+                    
+                    fig_pca = go.Figure()
+                    fig_pca.add_trace(go.Scatter(
+                        x=pca_df['PC1'],
+                        y=pca_df['PC2'],
+                        mode='markers+text',
+                        text=pca_df['FileName'],
+                        textposition="top center",
+                        marker=dict(
+                            size=12,
+                            color=pca_df['MD'],
+                            colorscale='Reds',
+                            showscale=True,
+                            colorbar=dict(title="MD値 (異常度)"),
+                            line=dict(width=1, color='DarkSlateGrey')
+                        ),
+                        hovertemplate="<b>%{text}</b><br>PC1: %{x:.2f}<br>PC2: %{y:.2f}<br>MD: %{marker.color:.2f}<extra></extra>"
+                    ))
+                    
+                    fig_pca.update_layout(
+                        xaxis_title=f"主成分1 (寄与率: {var_exp[0]:.1%})",
+                        yaxis_title=f"主成分2 (寄与率: {var_exp[1]:.1%})",
+                        height=600,
+                        margin=dict(l=20, r=20, t=40, b=20)
+                    )
+                    st.plotly_chart(fig_pca, use_container_width=True)
+                    
+                except Exception as e:
+                    st.error(f"PCA解析中にエラーが発生しました: {e}")
         # --- Multi-file Unit Space Construction ---
         st.markdown("##### 🛠️ MT法 単位空間の一括構築・保存")
         col_c1, col_c2 = st.columns([2, 1])
