@@ -124,3 +124,7 @@
 - [x] ISSUE-085: [Developer] 劣化トレンドグラフの実装 [CLOSED]
 - [x] ISSUE-086: [QA/Expert] 統計的正確性とUIレスポンスの検証 [CLOSED]
 - [x] ISSUE-087: [Architect] GEMINI.md のリファクタリングと実装規約 (docs/IMPLEMENTATION_RULES.md) への分離 [CLOSED]
+- [x] ISSUE-088: [Architect] フィンガープリント解析の設計 (SPC指標 & 差分可視化) [CLOSED]
+- [x] ISSUE-089: [Developer] スペクトルパターン一致度 (SPC) の算出とグラフ表示の実装 [CLOSED]
+- [x] ISSUE-090: [Developer] 2次元差分スペクトログラムの高度化 (アノテーション & 領域分析) [CLOSED]
+- [x] ISSUE-091: [QA/Expert] パターンマッチングの統計적妥当性とレスポンス検証 [CLOSED]

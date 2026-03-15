@@ -1095,7 +1095,7 @@ if page_selection == "通常解析":
                     st.plotly_chart(fig_fft, width='stretch')
 
                 with tab3:
-                    st.subheader("スペクトログラム (解析対象信号)")
+                    st.subheader("時間-周波数解析 & パターン一致度")
                     spec_f, spec_t, Sxx = calculate_spectrogram(processed, fs_hz, config.window, nperseg=spec_nperseg)
                     
                     # Convert to dB for visualization
@@ -1105,6 +1105,47 @@ if page_selection == "通常解析":
                     filter_status += f"LPF:{config.lowpass_hz}Hz" if config.lpf_enabled else ""
                     if not filter_status: filter_status = "None"
 
+                    # --- Fingerprint Analysis (SPC: Spectral Pattern Consistency) ---
+                    spc_scores = None
+                    if 'mt_space' in st.session_state and st.session_state.mt_space.average_magnitude_spectrum is not None:
+                        ref_mags_raw = st.session_state.mt_space.average_magnitude_spectrum
+                        ref_freqs_orig = np.linspace(0, fs_hz / 2, len(ref_mags_raw))
+                        ref_mags_interp = np.interp(spec_f, ref_freqs_orig, ref_mags_raw)
+                        
+                        # Calculate Pearson Correlation for each time frame
+                        # Use magnitude (sqrt of power) for pattern matching
+                        Sxx_mag_frames = np.sqrt(Sxx)
+                        spc_scores = []
+                        for i in range(Sxx_mag_frames.shape[1]):
+                            frame = Sxx_mag_frames[:, i]
+                            if np.sum(frame) > 0 and np.sum(ref_mags_interp) > 0:
+                                corr = np.corrcoef(frame, ref_mags_interp)[0, 1]
+                                spc_scores.append(max(0, corr))
+                            else:
+                                spc_scores.append(1.0) # Assume match if both silent
+                        
+                        st.markdown("##### 🕵️ パターン一致度推移 (SPC指標)")
+                        st.caption("基準（正常）のスペクトル形状と、現在の各瞬間における一致度を示します。値が急落する箇所は、異音の混入やパターンの崩れが発生しています。")
+                        
+                        fig_spc = go.Figure()
+                        fig_spc.add_trace(go.Scatter(
+                            x=spec_t, y=spc_scores,
+                            mode='lines',
+                            name='一致度 (SPC)',
+                            line=dict(color='green', width=2),
+                            fill='tozeroy',
+                            fillcolor='rgba(0, 255, 0, 0.1)'
+                        ))
+                        fig_spc.update_layout(
+                            xaxis_title="時間 (s)",
+                            yaxis=dict(title="一致度 (0.0 - 1.0)", range=[0, 1.05]),
+                            height=250,
+                            margin=dict(l=20, r=20, t=10, b=20),
+                            hovermode="x"
+                        )
+                        st.plotly_chart(fig_spc, use_container_width=True)
+
+                    st.markdown("##### メイン・スペクトログラム")
                     fig_spec = go.Figure(data=go.Heatmap(
                         x=spec_t, y=spec_f, z=Sxx_db,
                         colorscale='Viridis',
@@ -1119,21 +1160,20 @@ if page_selection == "通常解析":
                         height=500,
                         margin=dict(l=20, r=20, t=40, b=20)
                     )
-                    st.plotly_chart(fig_spec, width='stretch')
+                    st.plotly_chart(fig_spec, use_container_width=True)
 
                     # Add component spectrograms if available
                     if column_data_map:
                         st.markdown("---")
                         st.subheader("各軸の個別スペクトログラム")
                         for col_name, col_arr in column_data_map.items():
-                            # Remove DC for spectrogram calculation
                             f_c, t_c, Sxx_c = calculate_spectrogram(col_arr - np.mean(col_arr), fs_hz, config.window, nperseg=spec_nperseg)
                             Sxx_c_db = 10 * np.log10(Sxx_c + 1e-12)
                             
                             fig_c = go.Figure(data=go.Heatmap(
                                 x=t_c, y=f_c, z=Sxx_c_db,
                                 colorscale='Viridis',
-                                showscale=False # Hide colorbar to save space in small plots
+                                showscale=False 
                             ))
                             fig_c.update_layout(
                                 title=f"軸: {col_name} (DC除去)",
@@ -1143,19 +1183,13 @@ if page_selection == "通常解析":
                                 height=400,
                                 margin=dict(l=20, r=20, t=40, b=20)
                             )
-                            st.plotly_chart(fig_c, width='stretch')
+                            st.plotly_chart(fig_c, use_container_width=True)
 
                     # --- Anomaly Spectrogram (Difference between Current and Baseline) ---
-                    # Physical validity: Use interpolation to align different frequency resolutions.
                     if 'mt_space' in st.session_state and st.session_state.mt_space.average_magnitude_spectrum is not None:
                         ref_mags_raw = st.session_state.mt_space.average_magnitude_spectrum
-                        
-                        # Use interpolation to map high-res baseline to current spectrogram frequency bins
-                        # Original frequencies: 0 to fs/2 linearly spaced
                         ref_freqs_orig = np.linspace(0, fs_hz / 2, len(ref_mags_raw))
                         
-                        # Apply smoothing to the baseline if it's much higher res than target
-                        # to prevent narrow peaks from disappearing during down-interpolation.
                         if len(ref_mags_raw) > len(spec_f) * 2:
                             from scipy.ndimage import gaussian_filter1d
                             sigma = len(ref_mags_raw) / len(spec_f)
@@ -1166,11 +1200,9 @@ if page_selection == "通常解析":
                         ref_mags_interp = np.interp(spec_f, ref_freqs_orig, ref_mags_processed)
 
                         st.markdown("---")
-                        st.subheader("⚠️ 異常成分スペクトログラム (基準値からの増大分)")
-                        st.caption("正常時（基準）の振幅を超えた成分のみを抽出しています。過渡的な異音や突発的な振動の特定に有効です。")
+                        st.subheader("⚠️ 異常成分スペクトログラム (フィンガープリント差分)")
+                        st.caption("正常時（基準）の振幅を超えた成分のみを赤色で抽出しています。現象発生のタイミングと周波数を一目で特定できます。")
                         
-                        # Physical validity: Scaling correction to align Spectrogram power with FFT magnitude
-                        # We must multiply by 2 for single-sided representation to match FFT baseline
                         N_seg = spec_nperseg
                         if config.window == WindowFunction.HANNING:
                             win_seg = np.hanning(N_seg)
@@ -1178,34 +1210,29 @@ if page_selection == "通常解析":
                             win_seg = signal.windows.flattop(N_seg)
                         
                         scaling_corr = (np.sqrt(N_seg * np.sum(win_seg**2)) / np.sum(win_seg)) * 2.0
-                        
-                        # Convert current spectrogram power to magnitude
                         Sxx_mag = np.sqrt(Sxx) * scaling_corr
-                        
-                        # Broadcast interpolated reference spectrum (1D) across time axis (2D)
                         ref_broadcast = ref_mags_interp[:, np.newaxis]
                         
-                        # Calculate Delta: Only positive increases
+                        # Delta calculation
                         Sxx_diff = np.maximum(0, Sxx_mag - ref_broadcast)
-                        
-                        # Convert back to dB for visualization (relative to 1 unit)
                         Sxx_diff_db = 20 * np.log10(Sxx_diff + 1e-12)
                         
                         fig_diff = go.Figure(data=go.Heatmap(
                             x=spec_t, y=spec_f, z=Sxx_diff_db,
-                            colorscale='Reds', # Use Red scale to emphasize anomalies
-                            colorbar=dict(title=f"Delta (dB rel. {unit})")
+                            colorscale='Reds', 
+                            colorbar=dict(title=f"Delta (dB rel. {unit})"),
+                            zmin=-60 # Focus on significant increases
                         ))
                         
                         fig_diff.update_layout(
-                            title=f"Anomaly Signature (Increases relative to {st.session_state.get('load_mt_space_name', 'Baseline')})",
+                            title=f"Anomaly Signature relative to {st.session_state.get('load_mt_space_name', 'Baseline')}",
                             xaxis_title="時間 (s)",
                             yaxis_title="周波数 (Hz)",
                             yaxis_type="log" if fft_log_x else "linear",
                             height=500,
                             margin=dict(l=20, r=20, t=40, b=20)
                         )
-                        st.plotly_chart(fig_diff, width='stretch')
+                        st.plotly_chart(fig_diff, use_container_width=True)
 
         except Exception as e:
             st.error(f"解析エラー: {e}")
