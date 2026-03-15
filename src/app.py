@@ -641,8 +641,8 @@ if page_selection == "通常解析":
                     
                     fig_trend.update_layout(
                         xaxis_title="データ順序 (ファイル順)",
-                        yaxis=dict(title="MD値", titlefont=dict(color="red"), tickfont=dict(color="red")),
-                        yaxis2=dict(title=f"RMS ({unit})", titlefont=dict(color="blue"), tickfont=dict(color="blue"), overlaying="y", side="right"),
+                        yaxis=dict(title=dict(text="MD値", font=dict(color="red")), tickfont=dict(color="red")),
+                        yaxis2=dict(title=dict(text=f"RMS ({unit})", font=dict(color="blue")), tickfont=dict(color="blue"), overlaying="y", side="right"),
                         height=500,
                         margin=dict(l=20, r=20, t=40, b=20),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
