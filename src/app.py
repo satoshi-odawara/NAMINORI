@@ -429,14 +429,18 @@ if page_selection == "通常解析":
         # --- Advanced Trend Analysis ---
         if len(all_f_vectors) >= 2:
             st.subheader("📈 傾向分析 (データセット全体の俯瞰解析)")
-            tab_trend1, tab_trend2 = st.tabs(["🌈 全データ周波数ヒートマップ", "🧩 特徴量PCA分布 (類似度分析)"])
+            tab_trend1, tab_trend2, tab_trend3, tab_trend4 = st.tabs([
+                "🌈 全データ周波数ヒートマップ", 
+                "🧩 特徴量PCA分布 (類似度分析)", 
+                "📊 特徴量統計比較 (分布)",
+                "📈 劣化トレンド推移"
+            ])
             
             with tab_trend1:
                 st.markdown("##### 複数データの周波数特性比較")
                 st.caption("全アップロードデータの周波数特性を並べて表示します。周波数帯ごとの変化や共通のピークを把握できます。")
                 
                 # Physical validity: Interpolate all spectra to a common frequency grid
-                # Determine max frequency range
                 valid_freqs = [f for f in all_freqs if f is not None]
                 if valid_freqs:
                     max_nyquist = max([f[-1] for f in valid_freqs])
@@ -472,11 +476,17 @@ if page_selection == "通常解析":
                     st.warning("周波数データの収集に失敗したため、ヒートマップを表示できません。")
 
             with tab_trend2:
-                st.markdown("##### 特徴量空間におけるデータの類似度")
-                st.caption("15種類の特徴量を2次元に圧縮して表示します。近くにある点は特性が似ており、遠くにある点は性質が異なることを意味します。")
+                st.markdown("##### 特徴量空間におけるデータの類似度 (PCA Biplot)")
+                st.caption("15種類の特徴量を2次元に圧縮して表示します。矢印（ベクトル）は各特徴量がどの方向に影響を与えているかを示します。")
                 
                 try:
-                    # StandardScaler requires at least 2 samples
+                    # Feature names for Biplot
+                    feature_names = [
+                        "RMS", "Peak", "Kurtosis", "Skewness", "CrestFactor", "ShapeFactor",
+                        "Power(Low)", "Power(Mid)", "Power(High)", "Centroid", "Spread", "Entropy",
+                        "Overall", "OA(LF)", "OA(HF)"
+                    ]
+
                     scaler = StandardScaler()
                     X_scaled = scaler.fit_transform(np.array(all_f_vectors))
                     
@@ -487,10 +497,11 @@ if page_selection == "通常解析":
                     pca_df['FileName'] = all_filenames
                     pca_df['MD'] = all_mds
                     
-                    # Explained variance for physical validity
                     var_exp = pca.explained_variance_ratio_
                     
                     fig_pca = go.Figure()
+                    
+                    # Scatter plot for samples
                     fig_pca.add_trace(go.Scatter(
                         x=pca_df['PC1'],
                         y=pca_df['PC2'],
@@ -505,19 +516,136 @@ if page_selection == "通常解析":
                             colorbar=dict(title="MD値 (異常度)"),
                             line=dict(width=1, color='DarkSlateGrey')
                         ),
+                        name="データ点",
                         hovertemplate="<b>%{text}</b><br>PC1: %{x:.2f}<br>PC2: %{y:.2f}<br>MD: %{marker.color:.2f}<extra></extra>"
                     ))
                     
+                    # Biplot: Add arrows for features
+                    # Scale factor for arrows to be visible on the same plot
+                    scale_factor = np.max(np.abs(X_pca)) * 0.8
+                    loadings = pca.components_.T * scale_factor
+                    
+                    for i, (lx, ly) in enumerate(loadings):
+                        fig_pca.add_trace(go.Scatter(
+                            x=[0, lx],
+                            y=[0, ly],
+                            mode='lines+text',
+                            line=dict(color='rgba(100, 100, 100, 0.5)', width=1),
+                            text=["", feature_names[i]],
+                            textposition="bottom center",
+                            showlegend=False,
+                            hoverinfo='skip'
+                        ))
+                        # Add arrowhead
+                        fig_pca.add_annotation(
+                            x=lx, y=ly, ax=0, ay=0,
+                            xref="x", yref="y", axref="x", ayref="y",
+                            showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=1, arrowcolor='rgba(100, 100, 100, 0.5)'
+                        )
+
                     fig_pca.update_layout(
                         xaxis_title=f"主成分1 (寄与率: {var_exp[0]:.1%})",
                         yaxis_title=f"主成分2 (寄与率: {var_exp[1]:.1%})",
-                        height=600,
-                        margin=dict(l=20, r=20, t=40, b=20)
+                        height=650,
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
                     st.plotly_chart(fig_pca, use_container_width=True)
                     
                 except Exception as e:
                     st.error(f"PCA解析中にエラーが発生しました: {e}")
+
+            with tab_trend3:
+                st.markdown("##### 特徴量別の分布比較")
+                st.caption("基準（単位空間）と、アップロードされた全データ群の分布を比較します。どの物理指標が変化しているかを特定します。")
+                
+                if len(all_f_vectors) >= 2:
+                    feature_to_compare = st.selectbox(
+                        "比較する特徴量を選択", 
+                        options=feature_names,
+                        index=0
+                    )
+                    feat_idx = feature_names.index(feature_to_compare)
+                    
+                    # Prepare DataFrame for Boxplot
+                    box_data = []
+                    # Evaluation Data
+                    for i, vec in enumerate(all_f_vectors):
+                        is_ref = all_filenames[i].startswith("🔵 [基準]")
+                        box_data.append({
+                            "グループ": "基準値" if is_ref else "評価データ",
+                            "値": vec[feat_idx],
+                            "ファイル名": all_filenames[i]
+                        })
+                    
+                    df_box = pd.DataFrame(box_data)
+                    
+                    fig_box = go.Figure()
+                    for group in ["基準値", "評価データ"]:
+                        group_df = df_box[df_box["グループ"] == group]
+                        fig_box.add_trace(go.Box(
+                            y=group_df["値"],
+                            name=group,
+                            boxmean='sd', # Show mean and SD
+                            jitter=0.3,
+                            pointpos=-1.8,
+                            boxpoints='all',
+                            text=group_df["ファイル名"]
+                        ))
+                    
+                    fig_box.update_layout(
+                        yaxis_title=f"{feature_to_compare} の値",
+                        height=500,
+                        margin=dict(l=20, r=20, t=20, b=20)
+                    )
+                    st.plotly_chart(fig_box, use_container_width=True)
+                else:
+                    st.info("分布比較を行うには、基準データまたは複数のアップロードデータが必要です。")
+
+            with tab_trend4:
+                st.markdown("##### 劣化トレンド推移")
+                st.caption("データの順序に沿った変化を可視化します。異常度(MD値)や主要な物理量の時間的な変化を確認できます。")
+                
+                trend_df = pd.DataFrame({
+                    "Index": range(len(all_filenames)),
+                    "ファイル名": all_filenames,
+                    "MD値": all_mds,
+                    "RMS": [v[0] for v in all_f_vectors]
+                })
+                # Exclude baseline from trend if possible to see pure sequence
+                trend_df_data = trend_df[~trend_df["ファイル名"].str.startswith("🔵 [基準]")]
+                
+                if not trend_df_data.empty:
+                    fig_trend = go.Figure()
+                    fig_trend.add_trace(go.Scatter(
+                        x=trend_df_data["Index"],
+                        y=trend_df_data["MD値"],
+                        mode='lines+markers',
+                        name='MD値 (異常度)',
+                        line=dict(color='red', width=2),
+                        yaxis="y1"
+                    ))
+                    fig_trend.add_trace(go.Scatter(
+                        x=trend_df_data["Index"],
+                        y=trend_df_data["RMS"],
+                        mode='lines+markers',
+                        name='RMS (振動強さ)',
+                        line=dict(color='blue', width=2, dash='dot'),
+                        yaxis="y2"
+                    ))
+                    
+                    fig_trend.update_layout(
+                        xaxis_title="データ順序 (ファイル順)",
+                        yaxis=dict(title="MD値", titlefont=dict(color="red"), tickfont=dict(color="red")),
+                        yaxis2=dict(title=f"RMS ({unit})", titlefont=dict(color="blue"), tickfont=dict(color="blue"), overlaying="y", side="right"),
+                        height=500,
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                        hovermode="x unified"
+                    )
+                    st.plotly_chart(fig_trend, use_container_width=True)
+                else:
+                    st.info("トレンドを表示する評価データがありません。")
         # --- Multi-file Unit Space Construction ---
         st.markdown("##### 🛠️ MT法 単位空間の一括構築・保存")
         col_c1, col_c2 = st.columns([2, 1])
