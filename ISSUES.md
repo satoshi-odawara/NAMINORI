@@ -123,3 +123,4 @@
 - [x] ISSUE-084: [Developer] 特徴量別の分布比較（箱ひげ図）の実装 [CLOSED]
 - [x] ISSUE-085: [Developer] 劣化トレンドグラフの実装 [CLOSED]
 - [x] ISSUE-086: [QA/Expert] 統計的正確性とUIレスポンスの検証 [CLOSED]
+- [x] ISSUE-087: [Architect] GEMINI.md のリファクタリングと実装規約 (docs/IMPLEMENTATION_RULES.md) への分離 [CLOSED]
