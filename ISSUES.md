@@ -128,3 +128,6 @@
 - [x] ISSUE-089: [Developer] スペクトルパターン一致度 (SPC) の算出とグラフ表示の実装 [CLOSED]
 - [x] ISSUE-090: [Developer] 2次元差分スペクトログラムの高度化 (アノテーション & 領域分析) [CLOSED]
 - [x] ISSUE-091: [QA/Expert] パターンマッチングの統計적妥当性とレスポンス検証 [CLOSED]
+- [x] ISSUE-092: [Architect] 全データ差分解析の設計 (基準との一括dB差分) [CLOSED]
+- [x] ISSUE-093: [Developer] 「⚖️ 全データ差分ヒートマップ」タブの実装 [CLOSED]
+- [x] ISSUE-094: [QA/Expert] 基準データ不保持時のガードレールと描画負荷の検証 [CLOSED]

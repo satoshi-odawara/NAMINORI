@@ -434,33 +434,32 @@ if page_selection == "通常解析":
             current_q = st.session_state.get("eval_quantity", SignalQuantity.ACCEL)
             unit = current_q.unit_str if hasattr(current_q, 'unit_str') else current_q.value # Handle both Enum and raw value if necessary
             
-            tab_trend1, tab_trend2, tab_trend3, tab_trend4 = st.tabs([
+            tab_trend1, tab_trend_diff, tab_trend2, tab_trend3, tab_trend4 = st.tabs([
                 "🌈 全データ周波数ヒートマップ", 
+                "⚖️ 全データ差分ヒートマップ",
                 "🧩 特徴量PCA分布 (類似度分析)", 
                 "📊 特徴量統計比較 (分布)",
                 "📈 劣化トレンド推移"
             ])
             
+            # --- Common Data for Heatmaps ---
+            valid_freqs = [f for f in all_freqs if f is not None]
+            common_freq_grid = None
+            if valid_freqs:
+                max_nyquist = max([f[-1] for f in valid_freqs])
+                common_freq_grid = np.linspace(0, max_nyquist, 1024)
+
             with tab_trend1:
                 st.markdown("##### 複数データの周波数特性比較")
                 st.caption("全アップロードデータの周波数特性を並べて表示します。周波数帯ごとの変化や共通のピークを把握できます。")
                 
-                # Physical validity: Interpolate all spectra to a common frequency grid
-                valid_freqs = [f for f in all_freqs if f is not None]
-                if valid_freqs:
-                    max_nyquist = max([f[-1] for f in valid_freqs])
-                    common_freq_grid = np.linspace(0, max_nyquist, 1024)
-                    
+                if common_freq_grid is not None:
                     heatmap_data = []
                     for m, f in zip(all_mags, all_freqs):
-                        if f is None: # Handle reference with missing freq axis
-                            f = valid_freqs[0] # Assume same as first file
-                        
-                        # Interpolate to common grid
+                        if f is None: f = valid_freqs[0]
                         m_interp = np.interp(common_freq_grid, f, m)
                         heatmap_data.append(m_interp)
                     
-                    # Convert to dB for better visualization contrast
                     heatmap_array_db = 20 * np.log10(np.array(heatmap_data) + 1e-12)
                     
                     fig_heat = go.Figure(data=go.Heatmap(
@@ -479,6 +478,42 @@ if page_selection == "通常解析":
                     st.plotly_chart(fig_heat, use_container_width=True)
                 else:
                     st.warning("周波数データの収集に失敗したため、ヒートマップを表示できません。")
+
+            with tab_trend_diff:
+                st.markdown("##### 全データの基準からの逸脱度 (dB差分)")
+                st.caption("基準（正常）と各データの振幅を引き算し、変化分のみを一覧表示します。赤色は増加、青色は減少を示し、異常の発生タイミングと周波数を一目で特定できます。")
+                
+                if 'mt_space' in st.session_state and st.session_state.mt_space.average_magnitude_spectrum is not None and common_freq_grid is not None:
+                    ref_mags_raw = st.session_state.mt_space.average_magnitude_spectrum
+                    ref_freqs_orig = np.linspace(0, max_nyquist, len(ref_mags_raw)) # Assume fs matches
+                    ref_mags_interp = np.interp(common_freq_grid, ref_freqs_orig, ref_mags_raw)
+                    ref_db = 20 * np.log10(ref_mags_interp + 1e-12)
+
+                    diff_heatmap_data = []
+                    for m, f in zip(all_mags, all_freqs):
+                        if f is None: f = valid_freqs[0]
+                        m_interp = np.interp(common_freq_grid, f, m)
+                        m_db = 20 * np.log10(m_interp + 1e-12)
+                        diff_heatmap_data.append(m_db - ref_db)
+                    
+                    max_diff = 40.0
+                    fig_heat_diff = go.Figure(data=go.Heatmap(
+                        x=common_freq_grid,
+                        y=all_filenames,
+                        z=np.array(diff_heatmap_data),
+                        colorscale='RdBu_r',
+                        zmid=0, zmin=-max_diff, zmax=max_diff,
+                        colorbar=dict(title="差分 (dB)")
+                    ))
+                    fig_heat_diff.update_layout(
+                        xaxis_title="周波数 (Hz)",
+                        yaxis_title="ファイル名",
+                        height=max(400, len(all_filenames) * 20),
+                        margin=dict(l=20, r=20, t=20, b=20)
+                    )
+                    st.plotly_chart(fig_heat_diff, use_container_width=True)
+                else:
+                    st.info("基準データ（単位空間）が読み込まれていないか、有効な指紋データがありません。")
 
             with tab_trend2:
                 st.markdown("##### 特徴量空間におけるデータの類似度 (PCA Biplot)")
