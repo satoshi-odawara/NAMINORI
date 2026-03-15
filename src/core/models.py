@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Optional, List
 import numpy as np # Added for to_vector method
 
 class SignalQuantity(Enum):
@@ -85,28 +85,33 @@ class VibrationFeatures(TimeDomainFeatures):
     overall_level: float # FFT Overall value (Total)
     overall_low: float   # FFT Overall value (< 1000 Hz)
     overall_high: float  # FFT Overall value (>= 1000 Hz)
+    band_rms: List[float] # RMS values for 8 equal frequency bands
 
     @staticmethod
     def get_feature_names() -> List[str]:
         """Returns the list of feature names in the same order as to_vector()."""
-        return [
+        base_names = [
             "RMS", "Peak", "Kurtosis", "Skewness", "CrestFactor", "ShapeFactor",
             "PowerLow", "PowerMid", "PowerHigh",
             "SpectralCentroid", "SpectralSpread", "SpectralEntropy",
             "OverallTotal", "OverallLow", "OverallHigh"
         ]
+        band_names = [f"BandRMS_{i+1}" for i in range(8)]
+        return base_names + band_names
 
     def to_vector(self) -> np.ndarray:
         """
         Converts the vibration features into a NumPy array (vector) for MT method.
+        Includes Band RMS for enhanced similarity clustering.
         """
-        return np.array([
+        base_vector = [
             self.rms, self.peak, self.kurtosis, self.skewness,
             self.crest_factor, self.shape_factor,
             self.power_low, self.power_mid, self.power_high,
             self.spectral_centroid, self.spectral_spread, self.spectral_entropy,
             self.overall_level, self.overall_low, self.overall_high
-        ])
+        ]
+        return np.array(base_vector + self.band_rms)
 
 @dataclass
 class AnalysisResult:

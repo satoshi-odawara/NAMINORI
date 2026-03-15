@@ -177,6 +177,26 @@ def calculate_fft_features(
     spectral_shape_features["overall_low"] = overall_low
     spectral_shape_features["overall_high"] = overall_high
 
+    # --- Band RMS (8 Linear Bands) ---
+    # Divide the entire frequency range (0 to Nyquist) into 8 equal bands for similarity clustering
+    band_rms_list = []
+    max_freq = freq_hz[-1]
+    band_edges = np.linspace(0, max_freq, 9)
+    
+    for i in range(8):
+        f_start = band_edges[i]
+        f_end = band_edges[i+1]
+        # Include end edge only for the last band to avoid missing points
+        if i == 7:
+            mask = (freq_hz >= f_start) & (freq_hz <= f_end)
+        else:
+            mask = (freq_hz >= f_start) & (freq_hz < f_end)
+        
+        band_p = np.sum(scaled_power[mask]) / normalization
+        band_rms_list.append(np.sqrt(band_p))
+    
+    spectral_shape_features["band_rms"] = band_rms_list
+
     # Combine all frequency-domain features
     all_features = {**power_bands, **spectral_shape_features}
 

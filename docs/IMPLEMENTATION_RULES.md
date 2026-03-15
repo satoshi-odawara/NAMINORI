@@ -67,7 +67,7 @@ class SignalQuantity(Enum):
 
 ### 5.1 特徴量設計とベクトル順序（厳守）
 
-`VibrationFeatures.to_vector()` は以下の **15次元** の順序を厳守すること。
+`VibrationFeatures.to_vector()` は以下の **23次元** の順序を厳守すること。
 
 1. `rms` (有効値)
 2. `peak` (最大振幅)
@@ -84,6 +84,14 @@ class SignalQuantity(Enum):
 13. `overall_level` (全帯域Overall)
 14. `overall_low` (低域Overall)
 15. `overall_high` (高域Overall)
+16. `band_rms_1` (周波数帯域1 RMS: 0 - 1/8 Nyquist)
+17. `band_rms_2` (周波数帯域2 RMS)
+18. `band_rms_3` (周波数帯域3 RMS)
+19. `band_rms_4` (周波数帯域4 RMS)
+20. `band_rms_5` (周波数帯域5 RMS)
+21. `band_rms_6` (周波数帯域6 RMS)
+22. `band_rms_7` (周波数帯域7 RMS)
+23. `band_rms_8` (周波数帯域8 RMS: 7/8 - 8/8 Nyquist)
 
 ---
 

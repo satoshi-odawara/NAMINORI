@@ -131,3 +131,7 @@
 - [x] ISSUE-092: [Architect] 全データ差分解析の設計 (基準との一括dB差分) [CLOSED]
 - [x] ISSUE-093: [Developer] 「⚖️ 全データ差分ヒートマップ」タブの実装 [CLOSED]
 - [x] ISSUE-094: [QA/Expert] 基準データ不保持時のガードレールと描画負荷の検証 [CLOSED]
+- [x] ISSUE-095: [Architect] Band RMSと自動クラスタリングによる集約表示の設計 [CLOSED]
+- [x] ISSUE-096: [Developer] Band RMS (8帯域) 算出ロジックの実装と特徴量拡張 [CLOSED]
+- [x] ISSUE-097: [Developer] 自動グルーピング機能とドリルダウン型集約UIの実装 [CLOSED]
+- [x] ISSUE-098: [QA/Expert] 1000件超データの処理安定性とクラスタ妥当性の検証 [CLOSED]

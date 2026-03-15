@@ -15,6 +15,7 @@ import plotly.graph_objects as go
 from scipy.signal import find_peaks
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
 import json
 from dataclasses import asdict
 from src.core.signal_processing import load_wav_file, remove_dc_offset, apply_butterworth_filter
