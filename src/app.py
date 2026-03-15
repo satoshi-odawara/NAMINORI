@@ -1185,11 +1185,12 @@ if page_selection == "通常解析":
                             )
                             st.plotly_chart(fig_c, use_container_width=True)
 
-                    # --- Anomaly Spectrogram (Difference between Current and Baseline) ---
+                    # --- Simple Difference Spectrogram (dB Subtraction) ---
                     if 'mt_space' in st.session_state and st.session_state.mt_space.average_magnitude_spectrum is not None:
                         ref_mags_raw = st.session_state.mt_space.average_magnitude_spectrum
                         ref_freqs_orig = np.linspace(0, fs_hz / 2, len(ref_mags_raw))
                         
+                        # Apply smoothing to reference to match spectrogram resolution
                         if len(ref_mags_raw) > len(spec_f) * 2:
                             from scipy.ndimage import gaussian_filter1d
                             sigma = len(ref_mags_raw) / len(spec_f)
@@ -1198,34 +1199,29 @@ if page_selection == "通常解析":
                             ref_mags_processed = ref_mags_raw
 
                         ref_mags_interp = np.interp(spec_f, ref_freqs_orig, ref_mags_processed)
+                        ref_db = 20 * np.log10(ref_mags_interp + 1e-12)
 
                         st.markdown("---")
-                        st.subheader("⚠️ 異常成分スペクトログラム (フィンガープリント差分)")
-                        st.caption("正常時（基準）の振幅を超えた成分のみを赤色で抽出しています。現象発生のタイミングと周波数を一目で特定できます。")
+                        st.subheader("⚖️ 差分スペクトログラム (基準との比較)")
+                        st.caption("基準（正常）と現在の音の大きさを引き算した結果です。赤色は基準より増加、青色は減少を示します。白い領域は変化がない（正常と同じ）ことを意味します。")
                         
-                        N_seg = spec_nperseg
-                        if config.window == WindowFunction.HANNING:
-                            win_seg = np.hanning(N_seg)
-                        else:
-                            win_seg = signal.windows.flattop(N_seg)
+                        # Simple subtraction in dB scale
+                        # Sxx_db is current spectrogram, ref_db is baseline
+                        diff_db = Sxx_db - ref_db[:, np.newaxis]
                         
-                        scaling_corr = (np.sqrt(N_seg * np.sum(win_seg**2)) / np.sum(win_seg)) * 2.0
-                        Sxx_mag = np.sqrt(Sxx) * scaling_corr
-                        ref_broadcast = ref_mags_interp[:, np.newaxis]
-                        
-                        # Delta calculation
-                        Sxx_diff = np.maximum(0, Sxx_mag - ref_broadcast)
-                        Sxx_diff_db = 20 * np.log10(Sxx_diff + 1e-12)
+                        # Limit the range for better contrast (e.g., +/- 40dB)
+                        max_diff = 40.0
                         
                         fig_diff = go.Figure(data=go.Heatmap(
-                            x=spec_t, y=spec_f, z=Sxx_diff_db,
-                            colorscale='Reds', 
-                            colorbar=dict(title=f"Delta (dB rel. {unit})"),
-                            zmin=-60 # Focus on significant increases
+                            x=spec_t, y=spec_f, z=diff_db,
+                            colorscale='RdBu_r', # Red for positive (increase), Blue for negative (decrease)
+                            zmid=0,              # Ensure 0 is white
+                            zmin=-max_diff, zmax=max_diff,
+                            colorbar=dict(title="差分 (dB)")
                         ))
                         
                         fig_diff.update_layout(
-                            title=f"Anomaly Signature relative to {st.session_state.get('load_mt_space_name', 'Baseline')}",
+                            title=f"Difference Spectrogram (vs {st.session_state.get('load_mt_space_name', 'Baseline')})",
                             xaxis_title="時間 (s)",
                             yaxis_title="周波数 (Hz)",
                             yaxis_type="log" if fft_log_x else "linear",
