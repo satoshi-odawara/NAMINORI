@@ -114,3 +114,7 @@
 - [ ] ISSUE-075: [Developer] 特徴量別の寄与度（SN比/利得）可視化グラフの追加 [OPEN]
 - [x] ISSUE-076: [Developer] 単位空間（正常基準）の保存・呼出機能の実装と永続化（UI統合と自動ロードを実装） [CLOSED]
 - [ ] ISSUE-077: [QA/Expert] 単位空間と解析プリセットの不整合チェック機能の検証 [OPEN]
+- [ ] ISSUE-078: [Architect] サマリー解析強化の設計 (周波数ヒートマップ & PCA可視化) [OPEN]
+- [ ] ISSUE-079: [Developer] 全データの周波数ヒートマップ表示機能の実装 [OPEN]
+- [ ] ISSUE-080: [Developer] 特徴量PCAによる類似度可視化機能の実装 [OPEN]
+- [ ] ISSUE-081: [QA/Expert] 物理的妥当性と計算パフォーマンスの検証 [OPEN]
