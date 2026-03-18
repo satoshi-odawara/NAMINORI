@@ -769,27 +769,30 @@ if page_selection == "通常解析":
 
             with tab_trend4:
                 st.markdown("##### 劣化トレンド推移 (指標選択・平滑化解析)")
-                st.caption("表示したい特徴量を選択してください。デフォルトはRMS（振動強さ）です。複数選択すると1つのグラフに重ねて表示されます。")
+                st.caption("表示したい特徴量を選択してください。デフォルトはRMS（振動強さ）です。")
                 
                 # Dynamic indicator selection
-                # Add MD to the list of features for selection
                 trend_features = ["MD値"] + feature_names
-                selected_trend_feats = st.multiselect(
-                    "プロットする指標を選択", 
-                    options=trend_features, 
-                    default=["RMS"]
-                )
+                col_tr1, col_tr2 = st.columns([2, 1])
+                with col_tr1:
+                    selected_trend_feats = st.multiselect(
+                        "プロットする指標を選択", 
+                        options=trend_features, 
+                        default=["RMS"]
+                    )
+                with col_tr2:
+                    sort_order = st.radio("X軸の並び順", ["ファイル順 (時間軸)", "グループ順 (比較軸)"], horizontal=True)
 
                 trend_df_data_list = []
                 for i, vec in enumerate(all_f_vectors):
                     if all_filenames[i].startswith("🔵 [基準]"): continue
                     
                     row = {
-                        "Index": i,
+                        "OriginalIndex": i,
                         "ファイル名": all_filenames[i],
-                        "MD値": all_mds[i]
+                        "MD値": all_mds[i],
+                        "Cluster": cluster_labels[i] if cluster_labels is not None else 0
                     }
-                    # Add all other features to the row
                     for f_idx, f_name in enumerate(feature_names):
                         row[f_name] = vec[f_idx]
                     trend_df_data_list.append(row)
@@ -797,11 +800,17 @@ if page_selection == "通常解析":
                 trend_df_data = pd.DataFrame(trend_df_data_list)
                 
                 if not trend_df_data.empty and selected_trend_feats:
+                    # Handle Sorting
+                    if sort_order == "グループ順 (比較軸)" and cluster_labels is not None:
+                        trend_df_data = trend_df_data.sort_values(by=["Cluster", "OriginalIndex"]).reset_index(drop=True)
+                        trend_df_data["PlotIndex"] = trend_df_data.index
+                    else:
+                        trend_df_data["PlotIndex"] = trend_df_data["OriginalIndex"]
+
                     # Case A: Single Feature Selected -> Show Subplots (Global + Clusters)
                     if len(selected_trend_feats) == 1:
                         target_feat = selected_trend_feats[0]
                         max_val = trend_df_data[target_feat].max() * 1.1
-                        # MD has a minimum logical limit of 10.0 for visualization
                         if target_feat == "MD値": max_val = max(max_val, 10.0)
                         
                         plot_n_clusters = n_clusters if cluster_labels is not None else 0
@@ -814,25 +823,28 @@ if page_selection == "通常解析":
                         
                         # Row 1: Global
                         fig_trend.add_trace(go.Scatter(
-                            x=trend_df_data["Index"], y=trend_df_data[target_feat],
+                            x=trend_df_data["PlotIndex"], y=trend_df_data[target_feat],
                             mode='lines', name=f'{target_feat} (全体)',
                             line=dict(color='rgba(150, 150, 150, 0.3)', width=1),
                             showlegend=False
                         ), row=1, col=1)
                         
+                        # Visual Segment Partitions
+                        if sort_order == "グループ順 (比較軸)" and cluster_labels is not None:
+                            boundaries = trend_df_data[trend_df_data["Cluster"].diff() != 0].index.tolist()
+                            for b_idx in boundaries:
+                                if b_idx == 0: continue
+                                for row_idx in range(1, 2 + plot_n_clusters):
+                                    fig_trend.add_vline(x=b_idx - 0.5, line_dash="dash", line_color="gray", opacity=0.5, row=row_idx, col=1)
+
                         if cluster_labels is not None:
-                            # Use cluster labels corresponding only to the non-baseline files
-                            # We need to filter cluster_labels to match trend_df_data
-                            # For simplicity, we'll assume the order matches because we skipped baseline
-                            # But to be robust, we'll use the original index from the row
                             for c_id in range(n_clusters):
-                                c_mask = [cluster_labels[idx] == c_id for idx in trend_df_data["Index"]]
-                                c_df = trend_df_data[c_mask]
+                                c_df = trend_df_data[trend_df_data["Cluster"] == c_id]
                                 if c_df.empty: continue
                                 
                                 # Integrated Plot Marker
                                 fig_trend.add_trace(go.Scatter(
-                                    x=c_df["Index"], y=c_df[target_feat],
+                                    x=c_df["PlotIndex"], y=c_df[target_feat],
                                     mode='markers', name=f'Group {c_id+1}',
                                     marker=dict(size=8, line=dict(width=1, color='DarkSlateGrey')),
                                     text=c_df["ファイル名"]
@@ -840,34 +852,34 @@ if page_selection == "通常解析":
                                 
                                 # Individual Rows
                                 fig_trend.add_trace(go.Scatter(
-                                    x=trend_df_data["Index"], y=trend_df_data[target_feat],
+                                    x=trend_df_data["PlotIndex"], y=trend_df_data[target_feat],
                                     mode='markers', marker=dict(color='rgba(200, 200, 200, 0.2)', size=4),
                                     showlegend=False, hoverinfo='skip'
                                 ), row=c_id+2, col=1)
                                 
                                 fig_trend.add_trace(go.Scatter(
-                                    x=c_df["Index"], y=c_df[target_feat],
+                                    x=c_df["PlotIndex"], y=c_df[target_feat],
                                     mode='markers', name=f'G{c_id+1} 生データ',
                                     marker=dict(size=8),
                                     text=c_df["ファイル名"], showlegend=False
                                 ), row=c_id+2, col=1)
                                 
-                                # Moving Average
+                                # Moving Average (Only within segment)
                                 if len(c_df) >= 2:
                                     ma_val = c_df[target_feat].rolling(window=5, min_periods=1, center=True).mean()
                                     fig_trend.add_trace(go.Scatter(
-                                        x=c_df["Index"], y=ma_val,
+                                        x=c_df["PlotIndex"], y=ma_val,
                                         mode='lines', name=f'G{c_id+1} 傾向',
                                         line=dict(width=3), opacity=0.8
                                     ), row=c_id+2, col=1)
                         else:
                             fig_trend.add_trace(go.Scatter(
-                                x=trend_df_data["Index"], y=trend_df_data[target_feat],
+                                x=trend_df_data["PlotIndex"], y=trend_df_data[target_feat],
                                 mode='markers', name=target_feat, marker=dict(color='red', size=8)
                             ), row=1, col=1)
                             ma_val_global = trend_df_data[target_feat].rolling(window=5, min_periods=1, center=True).mean()
                             fig_trend.add_trace(go.Scatter(
-                                x=trend_df_data["Index"], y=ma_val_global,
+                                x=trend_df_data["PlotIndex"], y=ma_val_global,
                                 mode='lines', name='全体傾向', line=dict(color='red', width=3)
                             ), row=1, col=1)
 
@@ -878,32 +890,55 @@ if page_selection == "通常解析":
                             hovermode="x unified"
                         )
                         for i in range(1 + plot_n_clusters):
-                            feat_unit = unit if "RMS" in target_feat or "Overall" in target_feat or "Peak" in target_feat else ""
+                            feat_unit = unit if any(k in target_feat for k in ["RMS", "Overall", "Peak"]) else ""
                             y_title = f"{target_feat} ({feat_unit})" if feat_unit else target_feat
                             fig_trend.update_yaxes(title_text=y_title, range=[0, max_val], row=i+1, col=1)
                         
-                        fig_trend.update_xaxes(title_text="データ順序 (ファイル順)", row=1 + plot_n_clusters, col=1)
+                        fig_trend.update_xaxes(title_text="並び順 (インデックス)", row=1 + plot_n_clusters, col=1)
                         st.plotly_chart(fig_trend, use_container_width=True)
 
                     # Case B: Multiple Features Selected -> Show Unified Multi-axis Plot
                     else:
-                        st.info("💡 複数指標が選択されたため、1つの統合グラフに表示します。グループ別のサブプロットを確認するには、指標を1つだけ選択してください。")
+                        st.info("💡 複数指標が選択されたため、1つの統合グラフに表示します。")
                         fig_multi = go.Figure()
                         
+                        # Add segment boundaries for multi-plot
+                        if sort_order == "グループ順 (比較軸)" and cluster_labels is not None:
+                            boundaries = trend_df_data[trend_df_data["Cluster"].diff() != 0].index.tolist()
+                            for b_idx in boundaries:
+                                if b_idx == 0: continue
+                                fig_multi.add_vline(x=b_idx - 0.5, line_dash="dash", line_color="gray", opacity=0.5)
+                                # Label segments
+                                c_id_before = trend_df_data.loc[b_idx-1, "Cluster"]
+                                fig_multi.add_annotation(x=b_idx-1, y=1.05, yref="paper", text=f"Group {int(c_id_before+1)}", showarrow=False)
+                            # Last segment label
+                            last_idx = len(trend_df_data) - 1
+                            fig_multi.add_annotation(x=last_idx, y=1.05, yref="paper", text=f"Group {int(trend_df_data.loc[last_idx, 'Cluster']+1)}", showarrow=False)
+
                         for f_name in selected_trend_feats:
-                            # Normalize for comparison if multiple scales are involved? 
-                            # For now, just plot them.
-                            fig_multi.add_trace(go.Scatter(
-                                x=trend_df_data["Index"], y=trend_df_data[f_name],
-                                mode='lines+markers', name=f_name,
-                                hovertemplate=f"<b>{f_name}</b>: %{{y:.3f}}<extra></extra>"
-                            ))
+                            # Grouped lines: break connections between segments by plotting separately
+                            if sort_order == "グループ順 (比較軸)" and cluster_labels is not None:
+                                for c_id in range(n_clusters):
+                                    c_df = trend_df_data[trend_df_data["Cluster"] == c_id]
+                                    fig_multi.add_trace(go.Scatter(
+                                        x=c_df["PlotIndex"], y=c_df[f_name],
+                                        mode='lines+markers', name=f"{f_name} (G{c_id+1})",
+                                        legendgroup=f_name,
+                                        showlegend=(c_id == 0),
+                                        hovertemplate=f"<b>{f_name}</b>: %{{y:.3f}}<br>G{c_id+1}<extra></extra>"
+                                    ))
+                            else:
+                                fig_multi.add_trace(go.Scatter(
+                                    x=trend_df_data["PlotIndex"], y=trend_df_data[f_name],
+                                    mode='lines+markers', name=f_name,
+                                    hovertemplate=f"<b>{f_name}</b>: %{{y:.3f}}<extra></extra>"
+                                ))
                         
                         fig_multi.update_layout(
-                            xaxis_title="データ順序 (ファイル順)",
+                            xaxis_title="並び順 (インデックス)",
                             yaxis_title="値 (各指標の単位)",
                             height=600,
-                            margin=dict(l=20, r=20, t=40, b=20),
+                            margin=dict(l=20, r=20, t=60, b=20),
                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                             hovermode="x unified"
                         )
@@ -995,9 +1030,236 @@ if page_selection == "通常解析":
             else:
                 st.error("単位空間の構築には少なくとも2つ以上の有効なデータが必要です。")
 
+        # --- AI Reporting Assistant ---
         st.markdown("---")
+        with st.expander("🤖 生成AI 高度レポートアシスタント (コンテキスト統合 ＆ 深層解析型)", expanded=False):
+            st.markdown("##### 診断の「目的」や「対象」を整理し、生成AI（Gemini / ChatGPT 等）に渡す最適なプロンプトを作成します。")
+            
+            col_ai1, col_ai2 = st.columns(2)
+            with col_ai1:
+                st.subheader("🎯 分析のコンテキスト設定")
+                ai_purpose = st.selectbox(
+                    "分析の目的 (Purpose)",
+                    options=[
+                        "予兆検知 (いつもと違う兆候を見つけたい)",
+                        "異常分類 (故障箇所や原因を特定したい)",
+                        "品質評価 (測定環境やデータの信頼性を確認したい)",
+                        "総合報告 (現状の健康状態を要約したい)"
+                    ]
+                )
+                machine_type = st.text_input("設備の特性 (対象物)", placeholder="例: 定速回転ポンプ (1500rpm), モーター直結, 過去に軸受損傷歴あり")
+                
+                # --- ISO 10816 Classification ---
+                st.markdown("**ISO 10816 評価基準の適用**")
+                iso_class = st.selectbox(
+                    "設備クラスを選択 (ISO 10816)",
+                    options=[
+                        "適用しない",
+                        "Class I: 小形機械 (出力 < 15kW)",
+                        "Class II: 中形機械 (15kW <= 出力 < 75kW)",
+                        "Class III: 大形機械 (出力 >= 75kW, 強固な基礎)",
+                        "Class IV: 大形機械 (出力 >= 75kW, 柔軟な基礎)"
+                    ],
+                    help="選択すると、国際規格に基づいた振動レベル評価基準をAIに教育します。"
+                )
+            
+            with col_ai2:
+                sensor_env = st.text_input("センサ・環境 (測定条件)", placeholder="例: 加速度センサ磁石取付, 軸受ハウジング垂直方向, 周囲に別機の振動あり")
+                report_target = st.radio("レポートの提出先", ["現場保全担当者", "管理職・経営層", "AIとの技術的ディスカッション"], horizontal=True)
+                use_anonymization = st.checkbox("自動匿名化を有効にする", value=True, help="ファイル名を 'Sample_001' 等に置換してプライバシーを保護します。")
 
-        # We need a way to select which file to show details for
+            # --- Statistical Narrative Engine (Pre-calculation) ---
+            # Calculate physical trends to help AI logic
+            stats_narrative = "## Statistical Narrative (Pre-calculated Trends)\n"
+            if len(df_summary) >= 2:
+                # 1. Overall Trend
+                valid_mds = [float(x) for x in df_summary["MD値"] if x != "-"]
+                if len(valid_mds) >= 2:
+                    growth_rate = (valid_mds[-1] - valid_mds[0]) / (valid_mds[0] + 1e-6)
+                    stats_narrative += f"- Overall MD Change Rate: {growth_rate:+.1%}\n"
+                
+                # 2. Peak Anomaly Sample analysis
+                if any(df_summary["判定"] == "🔴 異常"):
+                    max_md_idx = df_summary[df_summary["MD値"] != "-"]["MD値"].astype(float).idxmax()
+                    max_sample = df_summary.loc[max_md_idx]
+                    stats_narrative += f"- Most Severe Sample: Index {max_md_idx}, MD {max_sample['MD値']}, Peak {max_sample['Peak']}\n"
+                    # Add Band RMS profile if available
+                    if 'X_all' in locals():
+                        peak_bands = X_all[max_md_idx, 15:]
+                        stats_narrative += f"  - Profile: Band RMS is dominant in {'High' if np.argmax(peak_bands) >= 5 else 'Low/Mid'} frequencies.\n"
+
+            # --- Advanced Physical Analysis Engine (Spectral Peaks & Gaps) ---
+            adv_physics_narrative = "## Advanced Physical Reasoning Material\n"
+            
+            # 1. Spectral Peaks Analysis (for max anomaly or cluster centroids)
+            if 'all_mags' in locals() and len(all_mags) > 0:
+                # Analyze peaks for the most severe anomaly
+                valid_mds_nums = [float(x) for x in df_summary["MD値"] if x != "-"]
+                if valid_mds_nums:
+                    max_md_idx_abs = np.argmax(valid_mds_nums)
+                    mag_data = all_mags[max_md_idx_abs]
+                    freq_axis = all_freqs[max_md_idx_abs] if all_freqs[max_md_idx_abs] is not None else np.linspace(0, fs_tmp/2, len(mag_data))
+                    
+                    # Detect peaks
+                    peaks_idx, _ = find_peaks(mag_data, height=np.max(mag_data)*0.2)
+                    top_peaks_idx = peaks_idx[np.argsort(mag_data[peaks_idx])][::-1][:3]
+                    peak_info = [f"{freq_axis[p]:.1f}Hz ({mag_data[p]:.3f}{unit})" for p in top_peaks_idx]
+                    
+                    adv_physics_narrative += f"### Anomaly Peak Signatures (Sample with MD {max(valid_mds_nums):.1f})\n"
+                    adv_physics_narrative += f"- Top 3 Spectral Peaks: {', '.join(peak_info)}\n"
+
+            # 2. Group Gap Analysis (Normalized difference between groups)
+            if cluster_labels is not None and n_clusters >= 2:
+                adv_physics_narrative += "### Statistical Gap Analysis (Relative to Baseline Group)\n"
+                # Find which group is likely the baseline (lowest avg MD)
+                cluster_avg_mds = []
+                for c_id in range(n_clusters):
+                    c_df = df_summary[df_summary['Cluster'] == c_id]
+                    c_avg_md = c_df[c_df["MD値"] != "-"]["MD値"].astype(float).mean() if not c_df[c_df["MD値"] != "-"].empty else 1.0
+                    cluster_avg_mds.append(c_avg_md)
+                
+                baseline_cid = np.argmin(cluster_avg_mds)
+                target_cid = np.argmax(cluster_avg_mds)
+                
+                if baseline_cid != target_cid:
+                    b_idx = df_summary[df_summary['Cluster'] == baseline_cid].index
+                    t_idx = df_summary[df_summary['Cluster'] == target_cid].index
+                    
+                    b_rms = X_all[b_idx, 0].mean()
+                    t_rms = X_all[t_idx, 0].mean()
+                    b_kurt = X_all[b_idx, 2].mean()
+                    t_kurt = X_all[t_idx, 2].mean()
+                    
+                    adv_physics_narrative += f"- Comparison: Group {target_cid+1} (Anomaly) vs Group {baseline_cid+1} (Healthy)\n"
+                    adv_physics_narrative += f"  - RMS Ratio: {t_rms/(b_rms+1e-6):.2f}x increase\n"
+                    adv_physics_narrative += f"  - Kurtosis Delta: {t_kurt - b_kurt:+.2f} shift\n"
+
+            # --- System context and physical definitions for AI ---
+            roles = {
+                "予兆検知": "振動保全の予兆管理スペシャリスト",
+                "異常分類": "設備診断・故障物理エンジニア",
+                "品質評価": "計測工学・信号処理専門家",
+                "総合報告": "製造現場の保全コンサルタント"
+            }
+            selected_role = next((v for k, v in roles.items() if k in ai_purpose), "振動解析エンジニア")
+
+            # ISO Definition Injection
+            iso_context = ""
+            if iso_class != "適用しない":
+                iso_thresholds = {
+                    "Class I": {"good": 0.71, "satisfactory": 1.8, "unsatisfactory": 4.5, "unacceptable": 7.1},
+                    "Class II": {"good": 1.12, "satisfactory": 2.8, "unsatisfactory": 7.1, "unacceptable": 11.0},
+                    "Class III": {"good": 1.8, "satisfactory": 4.5, "unsatisfactory": 11.0, "unacceptable": 18.0},
+                    "Class IV": {"good": 2.8, "satisfactory": 7.1, "unsatisfactory": 18.0, "unacceptable": 45.0}
+                }
+                cls_key = iso_class.split(":")[0]
+                th = iso_thresholds.get(cls_key, iso_thresholds["Class I"])
+                iso_context = f"""
+# ISO 10816-3 Diagnostic Standards ({cls_key})
+振動速度 (mm/s RMS) の評価基準:
+- < {th['good']} mm/s: 良好 (Good)
+- < {th['satisfactory']} mm/s: 良 (Satisfactory)
+- < {th['unsatisfactory']} mm/s: 注意 (Unsatisfactory)
+- > {th['unacceptable']} mm/s: 不可 (Unacceptable)
+※ 現在の物理量が速度以外の場合は、この基準を傾向判断の参考として扱ってください。
+"""
+
+            ai_system_context = f"""
+# Role
+あなたは【{selected_role}】として、提供されたデータを深く分析し、{report_target}向けに最適なレポートを作成してください。
+
+# Physics & Diagnostic Context
+- 物理量: {st.session_state.get('eval_quantity', SignalQuantity.ACCEL).value}
+- MD値: 1.0(正常)からの距離。3.0超(注意)、10.0超(異常)。
+- 尖度: 衝撃の鋭さ。3.0が正常、大きいほど剥離等の衝撃成分あり。
+- Band RMS (B1-B8): 全帯域を8等分した成分。低域(B1-2), 中域(B3-5), 高域(B6-8)。
+- SPC指標: 0-1.0。基準スペクトル形状との一致度。
+{iso_context}
+"""
+
+            # --- Extract and Anonymize Data ---
+            total_count = len(df_summary)
+            anomaly_count = len(df_summary[df_summary["判定"] == "🔴 異常"])
+            
+            cluster_info_text = ""
+            if cluster_labels is not None:
+                cluster_info_text = "## Clustering Analysis (Group Characteristics)\n"
+                for c_id in range(n_clusters):
+                    c_df = df_summary[df_summary['Cluster'] == c_id]
+                    c_avg_md = c_df[c_df["MD値"] != "-"]["MD値"].astype(float).mean() if not c_df[c_df["MD値"] != "-"].empty else 1.0
+                    c_indices = c_df.index
+                    avg_bands = X_all[c_indices, 15:].mean(axis=0)
+                    cluster_info_text += f"- Group {c_id+1}: {len(c_df)} files, Avg MD: {c_avg_md:.2f}, Profile: {np.round(avg_bands, 4).tolist()}\n"
+
+            # Prepare summarized material (Anonymized)
+            material_df = df_summary.copy()
+            if use_anonymization:
+                # Replace file names with Sample ID
+                material_df["ファイル名"] = [f"Sample_{i+1:03d}" for i in range(len(material_df))]
+            
+            cols_to_keep = ["ファイル名", "MD値", "判定", "信頼度", "RMS", "尖度", "重心周波数"]
+            if "Cluster" in material_df.columns: cols_to_keep.append("Cluster")
+            
+            # Pack summary results with fallback for missing tabulate dependency
+            try:
+                summary_markdown = material_df[cols_to_keep].head(50).to_markdown(index=False)
+            except ImportError:
+                summary_markdown = "## Data Material (CSV Format)\n" + material_df[cols_to_keep].head(50).to_csv(index=False)
+            
+            # --- Theme specific tasks ---
+            task_instruction = ""
+            if "予兆検知" in ai_purpose:
+                task_instruction = "時系列のMD値とRMSの変化点に着目し、劣化がいつから、どの程度の速さで始まっているか特定してください。突発的な異常か、漸増的な摩耗かを判断してください。"
+            elif "異常分類" in ai_purpose:
+                task_instruction = "Band RMSプロファイルと物理指標の変化から、不具合の物理的原因（アンバランス、ミスアライメント、軸受傷、ガタ、潤滑不良等）を推定してください。"
+            elif "品質評価" in ai_purpose:
+                task_instruction = "信頼度スコアとS/N比、クリッピング率を精査し、現在の測定データが診断に耐えうるものか評価してください。測定環境やセンサ設置の改善点を提案してください。"
+            else:
+                task_instruction = "全データの傾向を要約し、現時点で最も深刻なリスクと、直近で実施すべきアクションプランを提案してください。"
+
+            # --- Final Prompt Composition ---
+            full_prompt = f"""{ai_system_context}
+
+# Targeted Machine & Environment
+- Target: {machine_type if machine_type else "不明 (一般的回転機として扱う)"}
+- Environment: {sensor_env if sensor_env else "不明 (標準的な取付と仮定)"}
+
+# Analysis Goal
+{ai_purpose}
+{task_instruction}
+
+# Dataset Summary
+- Samples: {total_count}
+- Anomaly Hits: {anomaly_count}
+{cluster_info_text}
+{stats_narrative}
+{adv_physics_narrative}
+
+# Visual Evidence (Reference)
+提供されたテキストデータに加え、解析画面に表示されている以下のグラフ（画像）も重要な証拠です。
+1. 「全データ差分ヒートマップ」: どの周波数帯がいつ変化したかの2次元エビデンス。
+2. 「劣化トレンド推移」: 異常度(MD)の時系列的な進行エビデンス。
+3. 「PCA Biplot」: 特徴量空間でのデータの塊（クラスター）とその物理的要因エビデンス。
+
+# Data Material (Sample Records)
+{summary_markdown}
+
+# Constraints
+- {report_target}が納得できるよう、数値的な根拠（どの指標がどう変化したか）を明記すること。
+- ハルシネーション（憶測による結論）を避け、提供されたデータの範囲内で推論すること。
+- 日本語で出力すること。
+"""
+            st.subheader("📋 生成された高度プロンプト ＆ 深層解析材料")
+            st.info("以下のボックス内のテキストをすべてコピーして、生成AI（Gemini 等）に貼り付けてください。")
+            st.code(full_prompt, language="markdown")
+            
+            st.markdown("---")
+            st.markdown("##### 📄 AIレポートの受け取り後のヒント")
+            st.caption("AIから回答を得た後は、必要に応じて以下のように深掘りしてください。")
+            st.info("「Group 2 の Band RMS 特性が〇〇である理由を物理的に詳しく説明して」\n「この劣化速度に基づき、あと何ヶ月稼働可能か故障物理モデルから予測して」")
+
+        # --- Detail Selection ---
+        st.markdown("---")
         file_names = [f.name for f in uploaded_files]
         selected_file_name = st.selectbox("詳細表示するファイルを選択", options=file_names)
 

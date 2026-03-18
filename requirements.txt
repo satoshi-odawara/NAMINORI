@@ -4,5 +4,6 @@ scipy
 plotly
 pandas
 scikit-learn
+tabulate
 pytest
 pytest-cov
