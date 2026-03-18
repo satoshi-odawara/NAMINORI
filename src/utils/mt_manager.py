@@ -6,6 +6,7 @@ from src.diagnostics.mt_method import MTSpace
 from src.core.models import AnalysisConfig
 
 UNIT_SPACE_DIR = Path("data/unit_spaces")
+DATA_VERSION = "2.0" # Current version for 23D features (v1.0 was 15D)
 
 def save_unit_space(name: str, mt_space: MTSpace, config: AnalysisConfig):
     """
@@ -24,6 +25,7 @@ def save_unit_space(name: str, mt_space: MTSpace, config: AnalysisConfig):
     file_path = UNIT_SPACE_DIR / f"{name}.pkl"
     
     data = {
+        "version": DATA_VERSION,
         "name": name,
         "mean_vector": mt_space.mean_vector,
         "inverse_covariance_matrix": mt_space.inverse_covariance_matrix,

@@ -43,7 +43,7 @@ if 'mt_space' not in st.session_state:
     st.session_state.mt_space = MTSpace(min_samples=10, recommended_samples=30)
 
 def load_mt_space_into_session(space_name):
-    """単位空間をファイルから読み込み、セッション状態を更新する共通関数"""
+    """単位空間をファイルから読み込み、セッション状態を更新する。バージョン不整合時は拒否する。"""
     if space_name == "未選択":
         st.session_state.mt_space.mean_vector = None
         st.session_state.mt_space.inverse_covariance_matrix = None
@@ -52,11 +52,20 @@ def load_mt_space_into_session(space_name):
     
     space_data = mt_manager.load_unit_space(space_name)
     if space_data:
+        # Version Check
+        v = space_data.get("version", "1.0")
+        if v != mt_manager.DATA_VERSION:
+            st.sidebar.error(f"❌ 基準データ '{space_name}' は非対応バージョン (v{v}) です。最新の v{mt_manager.DATA_VERSION} で再構築してください。")
+            return False
+            
         st.session_state.mt_space.mean_vector = space_data["mean_vector"]
         st.session_state.mt_space.inverse_covariance_matrix = space_data["inverse_covariance_matrix"]
-        st.session_state.mt_space.average_magnitude_spectrum = space_data.get("average_magnitude_spectrum") # Load average spectrum
+        st.session_state.mt_space.average_magnitude_spectrum = space_data.get("average_magnitude_spectrum") 
         st.session_state.mt_space.is_provisional = False
-        st.session_state.mt_space.normal_samples_vectors = [np.zeros(15)] * space_data["sample_count"]
+        
+        # Initialize normal samples placeholder
+        current_dim = len(VibrationFeatures.get_feature_names())
+        st.session_state.mt_space.normal_samples_vectors = [np.zeros(current_dim)] * space_data["sample_count"]
         return True
     return False
 
@@ -321,10 +330,9 @@ if page_selection == "通常解析":
             all_f_vectors.append(mv)
             all_filenames.append(ref_name)
             all_mds.append(1.0)
-            if st.session_state.mt_space.average_magnitude_spectrum is not None:
-                all_mags.append(st.session_state.mt_space.average_magnitude_spectrum)
-                # We'll use the freq axis of the first uploaded file as a proxy for the baseline freq axis if they match FS
-                all_freqs.append(None) 
+            # Ensure index alignment: even if spectrum is missing, add None
+            all_mags.append(st.session_state.mt_space.average_magnitude_spectrum)
+            all_freqs.append(None) 
 
         # Process all files for the summary table
         st.subheader("📋 診断サマリー")
@@ -337,7 +345,7 @@ if page_selection == "通常解析":
                 tmp_path = tmp_file.name
             
             try:
-                # Basic analysis for summary
+                # Basic analysis logic... (same as before)
                 if file_extension == "wav":
                     fs_tmp, data_tmp, _ = load_wav_file(tmp_path)
                 else:
@@ -408,7 +416,7 @@ if page_selection == "通常解析":
                     "fs(Hz)": int(fs_tmp)
                 })
 
-                # Data collection for trend analysis
+                # Data collection: All lists must have same length
                 all_mags.append(mags)
                 all_freqs.append(f_hz)
                 all_f_vectors.append(all_f.to_vector())
@@ -421,12 +429,26 @@ if page_selection == "通常解析":
                     "判定": "🔴 ERROR",
                     "備考": f"詳細エラー: {str(e)}"
                 })
+                # Critical: Add dummy data to maintain index alignment
+                all_mags.append(None)
+                all_freqs.append(None)
+                all_f_vectors.append(np.zeros(23)) 
+                all_filenames.append(uploaded_file.name)
+                all_mds.append(0.0)
             finally:
                 if os.path.exists(tmp_path): os.remove(tmp_path)
             
         # --- Summary Table and Clustering UI ---
         df_summary = pd.DataFrame(summary_results)
-        X_all = np.array(all_f_vectors) # Physical validity: Pre-define feature matrix for both clustering and UI
+        
+        # Physical validity: Verify dimensions before array conversion
+        current_dim = len(VibrationFeatures.get_feature_names())
+        for i, v in enumerate(all_f_vectors):
+            if len(v) != current_dim:
+                st.error(f"FATAL: 次元不整合を検出しました (Expected {current_dim}, Found {len(v)} at Index {i})。解析設定または基準データを確認してください。")
+                st.stop()
+        
+        X_all = np.array(all_f_vectors)
         
         col_sum1, col_sum2 = st.columns([2, 1])
         with col_sum1:
@@ -1093,19 +1115,23 @@ if page_selection == "通常解析":
             
             # 1. Spectral Peaks Analysis (for max anomaly or cluster centroids)
             if 'all_mags' in locals() and len(all_mags) > 0:
-                # Analyze peaks for the most severe anomaly
-                valid_mds_nums = [float(x) for x in df_summary["MD値"] if x != "-"]
-                if valid_mds_nums:
-                    max_md_idx_abs = np.argmax(valid_mds_nums)
+                # Analyze peaks for the most severe anomaly among VALID data
+                valid_indices = [i for i, m in enumerate(all_mags) if m is not None]
+                if valid_indices:
+                    # Find max MD only within valid indices
+                    valid_mds_subset = [all_mds[i] for i in valid_indices]
+                    max_subset_idx = np.argmax(valid_mds_subset)
+                    max_md_idx_abs = valid_indices[max_subset_idx]
+                    
                     mag_data = all_mags[max_md_idx_abs]
-                    freq_axis = all_freqs[max_md_idx_abs] if all_freqs[max_md_idx_abs] is not None else np.linspace(0, fs_tmp/2, len(mag_data))
+                    freq_axis = all_freqs[max_md_idx_abs] if all_freqs[max_md_idx_abs] is not None else np.linspace(0, (fs_tmp/2 if 'fs_tmp' in locals() else 1000), len(mag_data))
                     
                     # Detect peaks
                     peaks_idx, _ = find_peaks(mag_data, height=np.max(mag_data)*0.2)
                     top_peaks_idx = peaks_idx[np.argsort(mag_data[peaks_idx])][::-1][:3]
                     peak_info = [f"{freq_axis[p]:.1f}Hz ({mag_data[p]:.3f}{unit})" for p in top_peaks_idx]
                     
-                    adv_physics_narrative += f"### Anomaly Peak Signatures (Sample with MD {max(valid_mds_nums):.1f})\n"
+                    adv_physics_narrative += f"### Anomaly Peak Signatures (Sample with MD {all_mds[max_md_idx_abs]:.1f})\n"
                     adv_physics_narrative += f"- Top 3 Spectral Peaks: {', '.join(peak_info)}\n"
 
             # 2. Group Gap Analysis (Normalized difference between groups)
