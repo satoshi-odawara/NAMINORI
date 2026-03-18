@@ -114,8 +114,8 @@ def test_mt_pipeline_integration(normal_wav_files_for_mt, dummy_sine_wav, dummy_
         fs, d, _ = load_wav_file(str(f_path))
         p = apply_butterworth_filter(remove_dc_offset(d), fs, 50, 20000, 4)
         t_f = calculate_time_domain_features(p)
-        _, _, f_f_d = calculate_fft_features(p, fs, WindowFunction.HANNING)
-        mt_space.add_normal_sample(VibrationFeatures(**asdict(t_f), **f_f_d), p, fs, conf)
+        _, mags, f_f_d = calculate_fft_features(p, fs, WindowFunction.HANNING)
+        mt_space.add_normal_sample(VibrationFeatures(**asdict(t_f), **f_f_d), mags)
 
     # Keyword arguments used here
     md_normal = mt_space.calculate_md(run_full_analysis_pipeline(file_path=dummy_sine_wav[0], fs_expected=44100).features)

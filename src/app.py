@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import numpy as np
 from src.core.models import SignalQuantity, AnalysisConfig, WindowFunction, VibrationFeatures, QualityMetrics
 from src.core.feature_extraction import calculate_time_domain_features, calculate_fft_features, calculate_spectrogram
@@ -19,6 +20,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 import json
 from dataclasses import asdict
+import zipfile
+import io
 from src.core.signal_processing import load_wav_file, remove_dc_offset, apply_butterworth_filter
 from src.core.benchmarking import BenchmarkConfig, MTConfig, run_benchmark_test
 from pathlib import Path
@@ -1243,8 +1246,55 @@ if page_selection == "通常解析":
             else:
                 task_instruction = "全データの傾向を要約し、現時点で最も深刻なリスクと、直近で実施すべきアクションプランを提案してください。"
 
+            # --- AI Evidence Package (ZIP Generation) ---
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w") as zf:
+                # 1. Summary CSV (Anonymized)
+                zf.writestr("diagnostic_summary.csv", material_df[cols_to_keep].to_csv(index=False))
+                
+                # 2. Detailed Feature Matrix (For AI Data Science)
+                feature_matrix_df = pd.DataFrame(X_all, columns=VibrationFeatures.get_feature_names())
+                if use_anonymization:
+                    feature_matrix_df.index = [f"Sample_{i+1:03d}" for i in range(len(feature_matrix_df))]
+                zf.writestr("full_feature_matrix.csv", feature_matrix_df.to_csv(index=True, index_label="SampleID"))
+                
+                # 3. Metadata JSON
+                metadata = {
+                    "analysis_timestamp": datetime.now().isoformat(),
+                    "machine_type": machine_type,
+                    "sensor_environment": sensor_env,
+                    "sampling_frequency_hz": fs_hz if 'fs_hz' in locals() else None,
+                    "quantity": st.session_state.get('eval_quantity', SignalQuantity.ACCEL).value,
+                    "filter_config": {
+                        "hpf": st.session_state.get("eval_hpf"),
+                        "lpf": st.session_state.get("eval_lpf"),
+                        "order": st.session_state.get("eval_order")
+                    },
+                    "iso_standard_applied": iso_class
+                }
+                zf.writestr("analysis_metadata.json", json.dumps(metadata, indent=4, ensure_ascii=False))
+
+            st.subheader("📦 AI解析エビデンス・パッケージ")
+            st.info("AIがデータサイエンス機能（Code Interpreter等）を使って深く分析するための全データをパッケージ化しました。")
+            st.download_button(
+                label="📥 診断エビデンスをダウンロード (ZIP)",
+                data=zip_buffer.getvalue(),
+                file_name=f"NAMINORI_AI_Evidence_{datetime.now().strftime('%Y%m%d_%H%M')}.zip",
+                mime="application/zip",
+                help="このZIPファイルをAIにアップロードしてください。全サンプルの詳細特徴量と解析条件が含まれています。"
+            )
+
             # --- Final Prompt Composition ---
+            file_descriptions = """
+# Uploaded Files Description
+以下のZIPファイルを解凍、または直接読み込んで分析に使用してください：
+1. `diagnostic_summary.csv`: 判定結果、MD値、主要物理量のサマリ。
+2. `full_feature_matrix.csv`: 全サンプルの23次元特徴量データ。統計分析や相関確認に使用してください。
+3. `analysis_metadata.json`: 解析の前提条件（設定値）と設備コンテキスト。
+"""
             full_prompt = f"""{ai_system_context}
+
+{file_descriptions}
 
 # Targeted Machine & Environment
 - Target: {machine_type if machine_type else "不明 (一般的回転機として扱う)"}

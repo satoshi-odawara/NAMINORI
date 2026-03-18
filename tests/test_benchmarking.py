@@ -77,7 +77,8 @@ def mock_feature_extraction():
     mock_freq_features = {
         'power_low': 0.3, 'power_mid': 0.4, 'power_high': 0.3, 
         'spectral_centroid': 1500.0, 'spectral_spread': 500.0, 'spectral_entropy': 8.0,
-        'overall_level': 1.0, 'overall_low': 0.8, 'overall_high': 0.6
+        'overall_level': 1.0, 'overall_low': 0.8, 'overall_high': 0.6,
+        'band_rms': [0.1] * 8
     }
     
     with patch('src.core.benchmarking.calculate_time_domain_features', side_effect=mock_calc_time_features) as mock_time, \
@@ -88,7 +89,7 @@ def test_run_benchmark_test_basic(dummy_benchmark_dataset, mock_load_wav_file, m
     benchmark_config = BenchmarkConfig(dataset_name="dummy_benchmark", analysis_config=AnalysisConfig(quantity=SignalQuantity.ACCEL, window=WindowFunction.HANNING), mt_config=MTConfig(anomaly_threshold=3.0))
     with patch('src.core.benchmarking.MTSpace') as MockMTSpace:
         instance = MockMTSpace.return_value
-        instance.mean_vector = np.random.rand(15) # Match new dimension
+        instance.mean_vector = np.random.rand(23) # Match new dimension
         def mock_md(features):
             return 5.0 if features.rms > 0.7 else 1.0
         instance.calculate_md.side_effect = mock_md
@@ -100,7 +101,7 @@ def test_run_benchmark_on_dcase_structure(dcase_like_dataset, mock_load_wav_file
     benchmark_config = BenchmarkConfig(dataset_name="dcase_like_benchmark", analysis_config=AnalysisConfig(quantity=SignalQuantity.ACCEL, window=WindowFunction.HANNING), mt_config=MTConfig(anomaly_threshold=3.0))
     with patch('src.core.benchmarking.MTSpace') as MockMTSpace:
         mock_instance = MagicMock()
-        mock_instance.mean_vector = np.random.rand(15)
+        mock_instance.mean_vector = np.random.rand(23)
         def mock_md(features):
             return 5.0 if features.rms > 0.7 else 1.0
         mock_instance.calculate_md.side_effect = mock_md
@@ -133,7 +134,7 @@ def test_run_benchmark_test_mt_space_not_established(dummy_benchmark_dataset, mo
 def test_run_benchmark_test_with_optimization(dummy_benchmark_dataset, mock_load_wav_file, mock_signal_processing, mock_feature_extraction):
     with patch('src.core.benchmarking.MTSpace') as MockMTSpace:
         instance = MockMTSpace.return_value
-        instance.mean_vector = np.random.rand(15)
+        instance.mean_vector = np.random.rand(23)
         md_side_effects = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
         instance.calculate_md.side_effect = md_side_effects
         benchmark_config = BenchmarkConfig(
@@ -150,7 +151,7 @@ def test_run_benchmark_test_with_optimization(dummy_benchmark_dataset, mock_load
 def test_run_benchmark_test_new_metrics(dummy_benchmark_dataset, mock_load_wav_file, mock_signal_processing, mock_feature_extraction):
     with patch('src.core.benchmarking.MTSpace') as MockMTSpace:
         instance = MockMTSpace.return_value
-        instance.mean_vector = np.random.rand(15)
+        instance.mean_vector = np.random.rand(23)
         md_side_effects = [1.0, 4.0, 2.0, 2.5, 5.0, 6.0]
         instance.calculate_md.side_effect = md_side_effects
 

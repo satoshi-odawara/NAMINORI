@@ -19,8 +19,11 @@ def create_vibration_features(
     overall_high: float = 0.6,
     spectral_centroid: float = 500.0,
     spectral_spread: float = 100.0,
-    spectral_entropy: float = 0.5
+    spectral_entropy: float = 0.5,
+    band_rms: list = None
 ) -> VibrationFeatures:
+    if band_rms is None:
+        band_rms = [0.1] * 8
     return VibrationFeatures(
         rms=rms,
         peak=peak,
@@ -36,7 +39,8 @@ def create_vibration_features(
         overall_high=overall_high,
         spectral_centroid=spectral_centroid,
         spectral_spread=spectral_spread,
-        spectral_entropy=spectral_entropy
+        spectral_entropy=spectral_entropy,
+        band_rms=band_rms
     )
 
 @pytest.fixture
@@ -60,87 +64,88 @@ def test_mtspace_initialization():
     assert mt_space.is_provisional is True
 
 def test_add_normal_sample_insufficient(mock_signal_params):
-    # Dim is 15, so 16+ samples needed for a valid space.
-    mt_space = MTSpace(min_samples=20, recommended_samples=25)
-    dummy_signal, fs, config = mock_signal_params
+    # Dim is 23, so 24+ samples needed for inverse covariance matrix.
+    mt_space = MTSpace(min_samples=24, recommended_samples=30)
     
+    dummy_mag = np.random.rand(128)
     # Add 2 samples
-    mt_space.add_normal_sample(create_vibration_features(rms=1.1, peak=2.1), dummy_signal, fs, config)
-    mt_space.add_normal_sample(create_vibration_features(rms=1.2, peak=2.2), dummy_signal, fs, config)
+    mt_space.add_normal_sample(create_vibration_features(rms=1.1, peak=2.1), dummy_mag)
+    mt_space.add_normal_sample(create_vibration_features(rms=1.2, peak=2.2), dummy_mag)
 
     assert len(mt_space.normal_samples_vectors) == 2
-    assert mt_space.mean_vector is None
+    # Mean vector is calculated from the first sample
+    assert mt_space.mean_vector is not None
+    # Inverse covariance is NOT yet calculated (requires samples > dimension)
+    assert mt_space.inverse_covariance_matrix is None
     assert mt_space.is_provisional is True
     assert "Insufficient" in mt_space.get_status()
 
 def test_add_normal_sample_sufficient_provisional(mock_signal_params):
-    # Dim is 15, so 16+ samples needed
-    mt_space = MTSpace(min_samples=16, recommended_samples=25)
-    dummy_signal, fs, config = mock_signal_params
+    # Dim is 23, so 24+ samples needed for inverse matrix
+    mt_space = MTSpace(min_samples=24, recommended_samples=40)
 
-    # Add 16 diverse samples to ensure non-singular matrix
-    for i in range(16):
-        mt_space.add_normal_sample(create_vibration_features(rms=1.0 + i*0.01), dummy_signal, fs, config)
+    # Add 30 diverse samples to ensure non-singular matrix
+    for i in range(30):
+        mt_space.add_normal_sample(create_vibration_features(rms=1.0 + i*0.01), np.random.rand(128))
 
-    assert len(mt_space.normal_samples_vectors) == 16
+    assert len(mt_space.normal_samples_vectors) == 30
     assert mt_space.mean_vector is not None
     assert mt_space.inverse_covariance_matrix is not None
     assert mt_space.is_provisional is True
     assert "Provisional" in mt_space.get_status()
 
 def test_add_normal_sample_established(mock_signal_params):
-    mt_space = MTSpace(min_samples=16, recommended_samples=16)
-    dummy_signal, fs, config = mock_signal_params
+    mt_space = MTSpace(min_samples=24, recommended_samples=30)
 
-    for i in range(16):
-        mt_space.add_normal_sample(create_vibration_features(rms=1.0 + i*0.01), dummy_signal, fs, config)
+    for i in range(30):
+        mt_space.add_normal_sample(create_vibration_features(rms=1.0 + i*0.01), np.random.rand(128))
 
-    assert len(mt_space.normal_samples_vectors) == 16
+    assert len(mt_space.normal_samples_vectors) == 30
     assert mt_space.mean_vector is not None
+    assert mt_space.inverse_covariance_matrix is not None
     assert mt_space.is_provisional is False
     assert "Established" in mt_space.get_status()
 
 def test_calculate_md_no_unit_space():
-    mt_space = MTSpace(min_samples=16)
+    mt_space = MTSpace(min_samples=24)
     features = create_vibration_features()
     md = mt_space.calculate_md(features)
     assert md == np.inf
 
 def test_calculate_md_normal_sample(mock_signal_params):
-    mt_space = MTSpace(min_samples=16, recommended_samples=16)
-    dummy_signal, fs, config = mock_signal_params
+    mt_space = MTSpace(min_samples=24, recommended_samples=30)
     
-    features_list = [create_vibration_features(rms=1.0 + i*0.01) for i in range(16)]
+    features_list = [create_vibration_features(rms=1.0 + i*0.01) for i in range(30)]
     for f in features_list:
-        mt_space.add_normal_sample(f, dummy_signal, fs, config)
+        mt_space.add_normal_sample(f, np.random.rand(128))
     
     # Calculate MD for the first sample
     md = mt_space.calculate_md(features_list[0])
     assert np.isfinite(md)
-    assert md < 10.0 # Should be relatively small for a member of the set
+    assert md < 15.0 
 
 def test_singular_covariance_matrix_regularization(mock_signal_params):
-    mt_space = MTSpace(min_samples=16, recommended_samples=16)
-    dummy_signal, fs, config = mock_signal_params
+    mt_space = MTSpace(min_samples=24, recommended_samples=30)
     
     # Add identical samples to force singularity
     f = create_vibration_features(rms=1.0)
-    for _ in range(20):
-        mt_space.add_normal_sample(f, dummy_signal, fs, config)
+    for _ in range(35):
+        mt_space.add_normal_sample(f, np.random.rand(128))
 
     # Should not raise LinAlgError due to regularization
     assert mt_space.mean_vector is not None
     assert mt_space.inverse_covariance_matrix is not None
 
 def test_mtspace_build_unit_space():
-    mt_space = MTSpace(min_samples=16, recommended_samples=16)
-    # Add 20 diverse samples
-    features_list = [create_vibration_features(rms=1.0 + i*0.1, peak=2.0 + i*0.2) for i in range(20)]
+    mt_space = MTSpace(min_samples=24, recommended_samples=30)
+    # Add 35 diverse samples
+    features_list = [create_vibration_features(rms=1.0 + i*0.1, peak=2.0 + i*0.2) for i in range(35)]
+    dummy_mags_list = [np.random.rand(128) for _ in range(35)]
     
     # Use the batch build method
-    mt_space.build_unit_space(features_list)
+    mt_space.build_unit_space(features_list, dummy_mags_list)
     
-    assert len(mt_space.normal_samples_vectors) == 20
+    assert len(mt_space.normal_samples_vectors) == 35
     assert mt_space.mean_vector is not None
     assert mt_space.inverse_covariance_matrix is not None
     assert mt_space.is_provisional is False

@@ -17,7 +17,8 @@ def test_mt_space_rms_averaging_logic():
         crest_factor=1.0, shape_factor=1.0,
         power_low=0.1, power_mid=0.1, power_high=0.1,
         spectral_centroid=100.0, spectral_spread=10.0, spectral_entropy=0.5,
-        overall_level=1.0, overall_low=0.5, overall_high=0.5
+        overall_level=1.0, overall_low=0.5, overall_high=0.5,
+        band_rms=[0.1]*8
     )
     
     # 2つのサンプルスペクトルを用意（長さ 5）
@@ -48,7 +49,8 @@ def test_mt_space_phase_insensitivity():
         crest_factor=1.0, shape_factor=1.0,
         power_low=0.1, power_mid=0.1, power_high=0.1,
         spectral_centroid=100.0, spectral_spread=10.0, spectral_entropy=0.5,
-        overall_level=1.0, overall_low=0.5, overall_high=0.5
+        overall_level=1.0, overall_low=0.5, overall_high=0.5,
+        band_rms=[0.1]*8
     )
     
     # すべて振幅 1.0 のスペクトル（サンプル数 10）
