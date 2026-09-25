@@ -162,3 +162,8 @@
 - [x] ISSUE-123: [QA/Expert] ZIPデータ整合性とAI解析互換性の検証 [CLOSED]
 - [x] ISSUE-124: [Developer/QA] VibrationFeatures 拡張に伴う既存テストコードの引数修正 [CLOSED]
 - [x] ISSUE-125: [Developer/QA] Band RMS 追加に伴う回帰テストのゴールデンデータ更新 [CLOSED]
+- [x] ISSUE-126: [Architect] M2Dファイル形式の仕様設計とパーサーアーキテクチャ策定 [CLOSED]
+- [x] ISSUE-127: [Developer] M2Dバイナリパーサー (`src/utils/m2d_parser.py`) の実装 [CLOSED]
+- [x] ISSUE-128: [Developer] Streamlit UIへのM2Dファイルアップロード統合 [CLOSED]
+- [x] ISSUE-129: [QA/Expert] M2Dパーサーの単体・統合テストおよびテキスト変換結果との完全一致検証 [CLOSED]
+- [x] ISSUE-130: [Documentation] ユーザーガイドおよびドキュメントへのM2Dファイル対応追記 [CLOSED]

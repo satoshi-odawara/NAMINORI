@@ -4,6 +4,7 @@ import requests
 import socket
 import pytest
 import os
+import sys
 
 def is_port_in_use(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -17,7 +18,7 @@ def test_app_startup():
     process = None
     try:
         process = subprocess.Popen(
-            ["python", "-m", "streamlit", "run", "src/app.py", "--server.port", str(port), "--server.headless", "true"],
+            [sys.executable, "-m", "streamlit", "run", "src/app.py", "--server.port", str(port), "--server.headless", "true"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True

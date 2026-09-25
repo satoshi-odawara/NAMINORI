@@ -64,6 +64,44 @@
 4. **[Architect]**: `ISSUES.md` を [CLOSED] に更新し、`development_plan.txt` の進捗を更新。
 5. **[System]**: **`git commit` の実行。** コミットメッセージには [Architect] が承認した要約を使用する。
 
+### 3.5 テスト実行手順と留意事項（テストの癖・仕様）
+
+本プロジェクトのテストスイートを実行する際は、以下の環境差異および固有の挙動（癖）に留意すること。
+
+#### 1. 仮想環境の使い分け（Linux/WSL vs Windows）
+* **Linux / WSL 環境:** `.venv/` を使用
+  ```bash
+  source .venv/bin/activate
+  pytest
+  # または仮想環境を直接指定
+  .venv/bin/pytest
+  ```
+* **Windows 環境:** `venv/` を使用
+  ```bash
+  source venv/Scripts/activate  # Git Bash
+  # または .\venv\Scripts\Activate.ps1  # PowerShell
+  pytest
+  ```
+* ※ Windows用 `venv` と Linux/WSL用 `.venv` はバイナリ非互換のため、OS環境に応じた仮想環境を使い分けること。
+
+#### 2. モジュール解決 (`pytest.ini`)
+* ルートディレクトリに `pytest.ini` （`pythonpath = .`）が配置されており、プロジェクトルートから `pytest` を実行することで `src` パッケージが自動認識される。
+
+#### 3. 各種テストの特性と注意点
+* **起動テスト (`tests/test_app_startup.py`):**
+  * 実際に Streamlit サーバーをバックグラウンドでポート 8501 起動し、HTTPヘルスチェック（200 OK）を確認するため、実行完了までに **約30秒** を要する。
+  * 迅速にロジックのみを検証したい場合は、本テストを除外して実行可能：
+    ```bash
+    pytest --ignore=tests/test_app_startup.py
+    ```
+* **回帰テスト (`tests/test_regression.py`):**
+  * ゴールデンデータ（`tests/golden_data/*.json`）との突合を行う。
+  * **初回実行時（または新規追加時）:** ゴールデンデータが存在しない場合、自動生成した上で **一度 FAIL（`Failed: New golden data created`）** する仕様である。その場合は **もう一度 `pytest` を再実行** することで正常に PASS する。
+* **カバレッジ測定付き実行:**
+  ```bash
+  pytest --cov=src --cov-report=xml
+  ```
+
 
 ---
 

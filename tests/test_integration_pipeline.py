@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 from scipy.io import wavfile
 import os
+from pathlib import Path
 import hashlib
 from datetime import datetime
 import json
@@ -16,6 +17,7 @@ from src.diagnostics.mt_method import MTSpace
 from src.utils.audit_log import AnalysisResult
 from src.core.plugins import plugin_manager
 from src.core.evaluation import perform_nr_evaluation, NoiseReductionEvaluation
+from src.utils.m2d_parser import parse_m2d_data, load_m2d_file
 from dataclasses import asdict
 
 # Ensure plugins are loaded for tests
@@ -154,3 +156,44 @@ def test_spectral_subtraction_pipeline_integration(sine_with_broadband_noise_wav
     # 4. Verify
     assert len(processed) == len(data_norm)
     assert np.std(processed) < np.std(data_norm) # Noise should be reduced
+
+
+def test_m2d_pipeline_integration():
+    """Verify end-to-end signal processing and feature extraction with real M2D file."""
+    m2d_file = Path("data/condition-chacher/normal.m2d")
+    if not m2d_file.exists():
+        pytest.skip("normal.m2d not found.")
+
+    # 1. Load M2D binary data
+    fs_hz, data_raw, file_hash = load_m2d_file(m2d_file)
+    assert fs_hz == 50000.0
+    assert len(data_raw) == 430080
+
+    # 2. Preprocess: DC offset removal and optional filtering
+    data_dc = remove_dc_offset(data_raw)
+    data_filtered = apply_butterworth_filter(
+        data_dc, fs_hz, highpass_hz=50, lowpass_hz=10000, order=4,
+        hpf_enabled=True, lpf_enabled=True
+    )
+    assert len(data_filtered) == len(data_raw)
+
+    # 3. Feature Extraction
+    t_feat = calculate_time_domain_features(data_filtered)
+    freqs, mags, f_feat = calculate_fft_features(data_filtered, fs_hz, WindowFunction.HANNING)
+
+    v_feat = VibrationFeatures(**asdict(t_feat), **f_feat)
+    feature_vector = v_feat.to_vector()
+
+    # Must match the 23-dimension standard defined in GEMINI.md / IMPLEMENTATION_RULES.md
+    assert len(feature_vector) == 23
+    assert v_feat.rms > 0
+    assert v_feat.peak > 0
+    assert v_feat.kurtosis is not None
+    assert len(freqs) == len(mags)
+
+    # 4. Quality check
+    q_metrics = calculate_quality_metrics(data_filtered, int(fs_hz), v_feat.rms, mags)
+    conf_score, conf_breakdown = get_confidence_score(q_metrics)
+    assert 0.0 <= conf_score <= 100.0
+    assert "飽和回避 (Clipping)" in conf_breakdown
+

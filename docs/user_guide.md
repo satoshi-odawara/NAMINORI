@@ -16,13 +16,19 @@ Open the provided local URL (e.g., `http://localhost:8501`) in your web browser.
 
 ## 2. Uploading Data
 
-The application supports vibration data from both WAV files (LPCM 16/24/32bit) and CSV files. **Multiple files can be uploaded simultaneously for batch analysis.**
+The application supports vibration data from WAV files (LPCM 16/24/32bit), CSV files, and **M2D binary files (Condition Catcher data logger series)**. **Multiple files can be uploaded simultaneously for batch analysis.**
 
 *   **Clear All Files:** Click the "🗑️ 全ファイルをクリア" (Clear All Files) button to remove all uploaded files from the list and reset the analysis results.
 
 ### For WAV Files:
 *   The application will display the file name, sampling frequency (Fs), and duration of the loaded data.
 *   An audio player will also appear, allowing you to listen to the uploaded file.
+
+### For M2D Binary Files (Condition Catcher format):
+*   Directly upload raw `.m2d` files without needing external conversion tools.
+*   **Sampling Frequency:** Configurable in sidebar under "📁 M2D解析設定" (defaults to 50,000 Hz / 20 μs period).
+*   **Metadata Display:** In detailed inspection view, the channel name (Ch2), voltage range (-5V to +5V), measurement timestamps, and sample count are automatically extracted and displayed.
+*   **High Accuracy:** Restores raw physical voltage values with sub-microvolt accuracy (< $10^{-6}\text{ V}$ error compared to official tool exports).
 
 ### For CSV Files:
 When a CSV file is uploaded, a new section **"CSV解析設定" (CSV Parsing Settings)** will appear in the sidebar:

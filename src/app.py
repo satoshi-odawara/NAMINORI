@@ -31,6 +31,7 @@ from src.utils import synthetic_data_generator as sdg
 from src.utils import csv_parser
 from src.utils import preset_manager
 from src.utils import mt_manager
+from src.utils import m2d_parser
 from src.core.models import AnalysisPreset
 
 st.set_page_config(layout="wide", page_title="振動解析Webアプリ")
@@ -283,8 +284,8 @@ if page_selection == "通常解析":
     with col_up1:
         # Enhanced file uploader for multiple files with dynamic key for resetting
         uploaded_files = st.file_uploader(
-            "評価用WAVまたはCSVファイルをアップロード (複数可)", 
-            type=["wav", "csv"], 
+            "評価用WAV, CSV, または M2Dファイルをアップロード (複数可)", 
+            type=["wav", "csv", "m2d"], 
             accept_multiple_files=True, 
             key=f"evaluation_uploader_{st.session_state.uploader_key}"
         )
@@ -296,6 +297,20 @@ if page_selection == "通常解析":
             st.rerun()
 
     if uploaded_files:
+        has_m2d = any(f.name.lower().endswith(".m2d") for f in uploaded_files)
+        if has_m2d:
+            st.sidebar.markdown("---")
+            st.sidebar.header("📁 M2D解析設定")
+            st.sidebar.number_input(
+                "M2D サンプリング周波数 (Hz)",
+                min_value=1.0,
+                max_value=1000000.0,
+                value=float(st.session_state.get("m2d_sampling_frequency", 50000.0)),
+                step=1000.0,
+                help="Condition Catcher 20μs周期計測時は 50,000 Hz (50 kHz)",
+                key="m2d_sampling_frequency"
+            )
+
         summary_results = []
         all_mags = []
         all_freqs = []
@@ -351,6 +366,9 @@ if page_selection == "通常解析":
                 # Basic analysis logic... (same as before)
                 if file_extension == "wav":
                     fs_tmp, data_tmp, _ = load_wav_file(tmp_path)
+                elif file_extension == "m2d":
+                    m2d_fs = st.session_state.get("m2d_sampling_frequency", 50000.0)
+                    fs_tmp, data_tmp, _ = m2d_parser.load_m2d_file(tmp_path, sampling_frequency_hz=m2d_fs)
                 else:
                     df_tmp = pd.read_csv(tmp_path, nrows=5, skipinitialspace=True)
                     df_tmp.columns = [c.strip() for c in df_tmp.columns]
@@ -507,7 +525,7 @@ if page_selection == "通常解析":
                 count = len(cluster_df)
                 
                 # Calculate cluster-wide statistics
-                is_ref_cluster = any(cluster_df["ファイル名"].str.contains("🔵 \[基準\]"))
+                is_ref_cluster = any(cluster_df["ファイル名"].str.contains(r"🔵 \[基準\]"))
                 avg_md = cluster_df[cluster_df["MD値"] != "-"]["MD値"].astype(float).mean() if not cluster_df[cluster_df["MD値"] != "-"].empty else 1.0
                 
                 header_text = f"Group {c_id+1}: {count} 件 "
@@ -997,6 +1015,9 @@ if page_selection == "通常解析":
                     # Same logic as summary to extract features
                     if file_extension == "wav":
                         fs_tmp, data_tmp, _ = load_wav_file(tmp_path)
+                    elif file_extension == "m2d":
+                        m2d_fs = st.session_state.get("m2d_sampling_frequency", 50000.0)
+                        fs_tmp, data_tmp, _ = m2d_parser.load_m2d_file(tmp_path, sampling_frequency_hz=m2d_fs)
                     else:
                         df_tmp = pd.read_csv(tmp_path, nrows=5, skipinitialspace=True)
                         df_tmp.columns = [c.strip() for c in df_tmp.columns]
@@ -1362,6 +1383,22 @@ if page_selection == "通常解析":
         try:
             if file_extension == "wav":
                 fs_hz, data_raw, file_hash = load_wav_file(tmp_file_path)
+            elif file_extension == "m2d":
+                m2d_fs = st.session_state.get("m2d_sampling_frequency", 50000.0)
+                m2d_res = m2d_parser.parse_m2d_data(tmp_file_path, sampling_frequency_hz=m2d_fs)
+                fs_hz = m2d_res.sampling_frequency_hz
+                data_raw = m2d_res.data
+                file_hash = m2d_res.file_hash
+
+                st.sidebar.markdown("---")
+                st.sidebar.header("📋 M2Dメタデータ")
+                st.sidebar.info(
+                    f"**チャンネル**: {m2d_res.channel_name}\n\n"
+                    f"**設定レンジ**: {m2d_res.voltage_range[0]:.1f}V 〜 {m2d_res.voltage_range[1]:.1f}V\n\n"
+                    f"**開始時刻**: {m2d_res.start_datetime.strftime('%Y-%m-%d %H:%M:%S') if m2d_res.start_datetime else '不明'}\n\n"
+                    f"**終了時刻**: {m2d_res.end_datetime.strftime('%Y-%m-%d %H:%M:%S') if m2d_res.end_datetime else '不明'}\n\n"
+                    f"**総サンプル数**: {m2d_res.total_samples:,} 点"
+                )
             elif file_extension == "csv":
                 st.sidebar.header("CSV解析設定")
                 csv_df_preview = pd.read_csv(tmp_file_path, skipinitialspace=True)

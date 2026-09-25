@@ -11,3 +11,4 @@ This documentation aims to provide comprehensive guides for users, developers, a
 *   [Plugin Development Guide](plugins/custom_plugins.md)
 *   [Evaluation and Benchmarking Framework](evaluation.md)
 *   [Technical Architecture Overview](architecture.md)
+*   [Condition Catcher M2D File Specification (M2D仕様書)](formats/m2d_specification.md)

@@ -111,7 +111,7 @@ def parse_csv_data(
     for col in data_columns:
         col_data = df[col]
         # Ensure numeric
-        if not np.issubdtype(col_data.dtype, np.number):
+        if not pd.api.types.is_numeric_dtype(col_data.dtype):
             col_data = pd.to_numeric(col_data, errors='coerce')
         
         arr = col_data.to_numpy()
